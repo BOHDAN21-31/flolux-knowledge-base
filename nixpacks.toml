@@ -5,7 +5,13 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm install"]
 
 [phases.build]
-cmds = ["npm run build"]
+# Білдимо фронтенд і копіюємо його в apps/api/public,
+# та генеруємо Prisma-клієнт для бекенду.
+cmds = [
+  "npm run prisma:generate --workspace apps/api",
+  "npm run build"
+]
 
 [start]
-cmd = "npx serve -s dist -l $PORT"
+# Старт лише API: він робить prisma migrate deploy, seed і віддає SPA на $PORT.
+cmd = "npm run start"

@@ -3,3 +3,11 @@ dist
 .DS_Store
 *.log
 .env
+.env.*
+!.env.example
+
+# Зібраний фронтенд, який копіюється в API (артефакт білда)
+apps/api/public
+
+# Згенерований Prisma-клієнт
+apps/api/node_modules/.prisma
