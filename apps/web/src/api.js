@@ -59,3 +59,47 @@ export const apiGet = (path) => request('GET', path);
 export const apiPost = (path, body) => request('POST', path, body ?? {});
 export const apiPatch = (path, body) => request('PATCH', path, body ?? {});
 export const apiDelete = (path) => request('DELETE', path);
+
+// Завантаження файлу (multipart/form-data). Повертає { url, type, size, mime }.
+export async function apiUpload(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch('/api/upload', { method: 'POST', headers, body: fd });
+  if (res.status === 401) {
+    clearToken();
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    throw new Error('Сесія завершилася. Увійдіть знову.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Помилка завантаження');
+  return data;
+}
+
+// WebAuthn (Touch/Face ID) через @simplewebauthn/browser
+export async function webauthnRegister(deviceName) {
+  const { startRegistration } = await import('@simplewebauthn/browser');
+  const options = await apiPost('/api/auth/webauthn/register/options');
+  const response = await startRegistration(options);
+  return apiPost('/api/auth/webauthn/register/verify', { response, deviceName });
+}
+
+export async function webauthnLogin(email) {
+  const { startAuthentication } = await import('@simplewebauthn/browser');
+  const options = await apiPost('/api/auth/webauthn/login/options', { email });
+  const response = await startAuthentication(options);
+  // повертає { token, user } — як звичайний пароль-логін
+  return apiPost('/api/auth/webauthn/login/verify', { email, response });
+}
+
+export async function webauthnSupported() {
+  try {
+    const { browserSupportsWebAuthn } = await import('@simplewebauthn/browser');
+    return browserSupportsWebAuthn();
+  } catch {
+    return false;
+  }
+}

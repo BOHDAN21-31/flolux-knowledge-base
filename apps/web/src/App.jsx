@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Trash2, Check, X, Search, Settings, ChevronRight, Users, FileText, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase } from 'lucide-react';
-import { apiGet, apiPost, apiPatch, apiDelete, setToken, clearToken, getToken, UNAUTHORIZED_EVENT } from './api';
+import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Trash2, Check, X, Search, Settings, ChevronRight, Users, FileText, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint } from 'lucide-react';
+import { apiGet, apiPost, apiPatch, apiDelete, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
+import ProfilePage from './components/ProfilePage';
 
 // ============ КОНСТАНТИ ============
 const REFERRAL_WORD = 'Flolux';
@@ -39,6 +40,7 @@ export default function FloluxKB() {
   const [authChecked, setAuthChecked] = useState(false);
   const [topicsMap, setTopicsMap] = useState({});
   const [articles, setArticles] = useState([]);
+  const [allLocations, setAllLocations] = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false);
 
   const [authMode, setAuthMode] = useState('login');
@@ -47,12 +49,17 @@ export default function FloluxKB() {
   const [activeArticle, setActiveArticle] = useState(null);
   const [showCreateArticle, setShowCreateArticle] = useState(false);
 
+  const refreshMe = async () => {
+    const me = await apiGet('/api/users/me');
+    setCurrentUser(me);
+    return me;
+  };
+
   // Перевірка токена при старті
   useEffect(() => {
     const t = getToken();
     if (!t) { setAuthChecked(true); return; }
-    apiGet('/api/auth/me')
-      .then((r) => setCurrentUser(r.user))
+    refreshMe()
       .catch(() => clearToken())
       .finally(() => setAuthChecked(true));
   }, []);
@@ -72,14 +79,16 @@ export default function FloluxKB() {
   // Завантаження даних після входу
   useEffect(() => {
     if (!currentUser) { setDataLoaded(false); return; }
-    Promise.all([apiGet('/api/topics'), apiGet('/api/articles')])
-      .then(([topics, arts]) => {
+    if (dataLoaded) return;
+    Promise.all([apiGet('/api/topics'), apiGet('/api/articles'), apiGet('/api/locations')])
+      .then(([topics, arts, locs]) => {
         setTopicsMap(groupTopics(topics));
         setArticles(arts);
+        setAllLocations(locs);
         setDataLoaded(true);
       })
       .catch((e) => console.error('Не вдалося завантажити дані:', e));
-  }, [currentUser]);
+  }, [currentUser, dataLoaded]);
 
   const reloadArticles = async () => {
     const arts = await apiGet('/api/articles');
@@ -90,6 +99,11 @@ export default function FloluxKB() {
     const topics = await apiGet('/api/topics');
     setTopicsMap(groupTopics(topics));
   };
+  const reloadLocations = async () => {
+    const locs = await apiGet('/api/locations');
+    setAllLocations(locs);
+    return locs;
+  };
 
   const handleLogout = () => {
     clearToken();
@@ -99,8 +113,8 @@ export default function FloluxKB() {
     setActiveArticle(null);
   };
 
-  const onAuthSuccess = (user) => {
-    setCurrentUser(user);
+  const onAuthSuccess = async () => {
+    await refreshMe().catch(() => {});
     setView('home');
   };
 
@@ -120,6 +134,7 @@ export default function FloluxKB() {
         user={currentUser}
         onLogout={handleLogout}
         onNavigate={(v) => { setView(v); setActiveTopic(null); setActiveArticle(null); }}
+        onProfile={() => { setView('profile'); setActiveTopic(null); setActiveArticle(null); }}
         view={view}
         isAdmin={isAdmin}
       />
@@ -130,7 +145,17 @@ export default function FloluxKB() {
             user={currentUser}
             topics={topicsMap}
             articles={articles}
+            allLocations={allLocations}
             onTopicClick={(t) => { setActiveTopic(t); setView('topic'); }}
+            onGoProfile={() => setView('profile')}
+          />
+        )}
+
+        {view === 'profile' && (
+          <ProfilePage
+            user={currentUser}
+            allLocations={allLocations}
+            onRefresh={refreshMe}
           />
         )}
 
@@ -147,6 +172,8 @@ export default function FloluxKB() {
             topicsMap={topicsMap}
             reloadTopics={reloadTopics}
             articles={articles}
+            allLocations={allLocations}
+            reloadLocations={reloadLocations}
           />
         )}
 
@@ -176,6 +203,7 @@ export default function FloluxKB() {
         {showCreateArticle && activeTopic && (
           <CreateArticleModal
             topic={activeTopic}
+            allLocations={allLocations}
             onClose={() => setShowCreateArticle(false)}
             onCreated={async () => { await reloadArticles(); setShowCreateArticle(false); }}
           />
@@ -206,6 +234,9 @@ function AuthScreen({ mode, setMode, onSuccess }) {
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [bioSupported, setBioSupported] = useState(false);
+
+  useEffect(() => { webauthnSupported().then(setBioSupported); }, []);
 
   const handleLogin = async () => {
     setError(''); setSuccess('');
@@ -214,9 +245,29 @@ function AuthScreen({ mode, setMode, onSuccess }) {
     try {
       const r = await apiPost('/api/auth/login', { email: form.email, password: form.password });
       setToken(r.token);
-      onSuccess(r.user);
+      await onSuccess();
     } catch (e) {
       setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleBioLogin = async () => {
+    setError(''); setSuccess('');
+    let email = form.email;
+    if (!email) {
+      email = window.prompt('Введіть e-mail для входу через Touch/Face ID');
+      if (!email) return;
+      setForm((f) => ({ ...f, email }));
+    }
+    setBusy(true);
+    try {
+      const r = await webauthnLogin(email);
+      setToken(r.token);
+      await onSuccess();
+    } catch (e) {
+      setError(e.message || 'Не вдалося увійти через біометрію');
     } finally {
       setBusy(false);
     }
@@ -289,6 +340,12 @@ function AuthScreen({ mode, setMode, onSuccess }) {
               <button onClick={handleLogin} disabled={busy} className="w-full bg-rose-500 hover:bg-rose-600 disabled:opacity-60 text-white py-3 rounded-md transition tracking-wider text-sm">
                 {busy ? 'ЗАЧЕКАЙТЕ...' : 'УВІЙТИ'}
               </button>
+              {bioSupported && (
+                <button onClick={handleBioLogin} disabled={busy} type="button"
+                  className="w-full flex items-center justify-center gap-2 border border-stone-300 hover:border-rose-400 text-stone-700 py-3 rounded-md transition text-sm">
+                  <Fingerprint className="w-4 h-4" /> Увійти через Touch / Face ID
+                </button>
+              )}
             </div>
           )}
 
@@ -368,7 +425,7 @@ function Field({ icon: Icon, label, type, value, onChange, hint, rightIcon: Righ
 }
 
 // ============ HEADER ============
-function Header({ user, onLogout, onNavigate, view, isAdmin }) {
+function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
   const RoleIcon = ROLES[user.role]?.icon || User;
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-30">
@@ -392,13 +449,15 @@ function Header({ user, onLogout, onNavigate, view, isAdmin }) {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-sm text-stone-700" style={{ fontFamily: 'system-ui, sans-serif' }}>{user.name}</div>
+          <button onClick={onProfile} className="text-right group" title="Мій профіль">
+            <div className="text-sm text-stone-700 group-hover:text-rose-600 transition" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              {user.name}{user.surname ? ` ${user.surname}` : ''}
+            </div>
             <div className="text-xs text-stone-500">{ROLES[user.role]?.name || 'Без ролі'}</div>
-          </div>
-          <div className={`w-9 h-9 rounded-full flex items-center justify-center ${ROLES[user.role]?.color || 'bg-stone-100 text-stone-600'} border`}>
-            <RoleIcon className="w-4 h-4" />
-          </div>
+          </button>
+          <button onClick={onProfile} className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden ${ROLES[user.role]?.color || 'bg-stone-100 text-stone-600'} border`} title="Мій профіль">
+            {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : <RoleIcon className="w-4 h-4" />}
+          </button>
           <button onClick={onLogout} className="p-2 text-stone-400 hover:text-rose-500 transition" title="Вийти">
             <LogOut className="w-5 h-5" />
           </button>
@@ -419,7 +478,7 @@ function NavBtn({ active, onClick, icon: Icon, children }) {
 }
 
 // ============ ГОЛОВНА ============
-function HomeView({ user, topics, articles, onTopicClick }) {
+function HomeView({ user, topics, articles, allLocations = [], onTopicClick, onGoProfile }) {
   if (!user.role) {
     return (
       <div className="text-center py-16">
@@ -448,6 +507,34 @@ function HomeView({ user, topics, articles, onTopicClick }) {
         <h1 className="text-4xl text-stone-800 mb-2">{user.name}</h1>
         <p className="text-stone-500 italic">Ваш робочий простір — {ROLES[user.role]?.name.toLowerCase()}</p>
       </div>
+
+      {(() => {
+        const approved = (user.locations || []).filter((l) => l.approved);
+        const countFor = (id) => allLocations.find((x) => x.id === id)?.userCount ?? 0;
+        return (
+          <div className="mb-12">
+            <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4 flex items-center gap-2"><MapPin className="w-3.5 h-3.5" /> Мої локації</h2>
+            {approved.length === 0 ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-5 flex items-center justify-between">
+                <p className="text-sm text-amber-800 italic">У вас немає підтверджених локацій. Запросіть локацію у профілі.</p>
+                <button onClick={onGoProfile} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm whitespace-nowrap">Запросити локацію</button>
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {approved.map((l) => (
+                  <div key={l.locationId} className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-stone-800">
+                      <span className="w-3 h-3 rounded-full" style={{ background: l.color || '#a8a29e' }} />
+                      {l.name}{l.isManager ? ' · керівник' : ''}
+                    </span>
+                    <span className="text-sm text-stone-500">{countFor(l.locationId)} людей</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4">Розділи знань для вашої ролі</h2>
       <div className="grid md:grid-cols-2 gap-4 mb-12">
@@ -708,9 +795,29 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
               )}
             </div>
 
+            {article.locations && article.locations.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {article.locations.map((l) => (
+                  <span key={l.locationId} className="px-2 py-0.5 rounded-full text-xs text-white flex items-center gap-1" style={{ background: l.color || '#a8a29e' }}>
+                    <MapPin className="w-3 h-3" />{l.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
             <div className="prose max-w-none text-stone-700 leading-relaxed whitespace-pre-wrap" style={{ fontFamily: 'system-ui, sans-serif', fontSize: '15px', lineHeight: '1.75' }}>
               {renderMarkdown(article.content)}
             </div>
+
+            {article.mediaUrls && article.mediaUrls.length > 0 && (
+              <div className="grid sm:grid-cols-2 gap-3 mt-6">
+                {article.mediaUrls.map((url) => (
+                  /\.(mp4|mov|webm)$/i.test(url)
+                    ? <video key={url} src={url} controls className="w-full rounded-lg border border-stone-200" />
+                    : <img key={url} src={url} alt="" className="w-full rounded-lg border border-stone-200 object-cover" />
+                ))}
+              </div>
+            )}
           </>
         )}
       </article>
@@ -827,10 +934,33 @@ function renderMarkdown(text) {
 }
 
 // ============ СТВОРЕННЯ СТАТТІ ============
-function CreateArticleModal({ topic, onClose, onCreated }) {
+function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
   const [form, setForm] = useState({ title: '', content: '', tags: '' });
+  const [locationIds, setLocationIds] = useState([]);
+  const [mediaUrls, setMediaUrls] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const mediaRef = useRef(null);
+
+  const toggleLoc = (id) => setLocationIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const onPickMedia = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setError(''); setUploading(true);
+    try {
+      for (const f of files) {
+        const up = await apiUpload(f);
+        setMediaUrls((prev) => [...prev, { url: up.url, type: up.type }]);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+      if (mediaRef.current) mediaRef.current.value = '';
+    }
+  };
 
   const handleSave = async () => {
     if (!form.title.trim() || !form.content.trim()) {
@@ -845,6 +975,8 @@ function CreateArticleModal({ topic, onClose, onCreated }) {
         title: form.title,
         content: form.content,
         tags: form.tags,
+        locationIds,
+        mediaUrls: mediaUrls.map((m) => m.url),
       });
       await onCreated();
     } catch (e) {
@@ -885,6 +1017,49 @@ function CreateArticleModal({ topic, onClose, onCreated }) {
               placeholder="наприклад: троянди, догляд, поради" />
           </div>
 
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">
+              Локації <span className="text-stone-400 normal-case">(порожньо = доступно всім за роллю)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {allLocations.map((l) => {
+                const on = locationIds.includes(l.id);
+                return (
+                  <button key={l.id} type="button" onClick={() => toggleLoc(l.id)}
+                    className={`px-3 py-1 rounded-full text-sm border transition ${on ? 'text-white border-transparent' : 'text-stone-600 border-stone-300 bg-white'}`}
+                    style={on ? { background: l.color || '#a8a29e' } : undefined}>
+                    {l.name}
+                  </button>
+                );
+              })}
+              {allLocations.length === 0 && <span className="text-sm text-stone-400 italic">Локацій ще немає</span>}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Фото / відео</label>
+            <input ref={mediaRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={onPickMedia} />
+            <button type="button" onClick={() => mediaRef.current?.click()} disabled={uploading}
+              className="flex items-center gap-2 px-4 py-2 border border-stone-300 hover:border-rose-400 rounded-md text-sm text-stone-700 disabled:opacity-60">
+              <Plus className="w-4 h-4" /> {uploading ? 'Завантаження...' : 'Додати фото/відео'}
+            </button>
+            {mediaUrls.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                {mediaUrls.map((m, i) => (
+                  <div key={m.url} className="relative group">
+                    {m.type === 'video'
+                      ? <video src={m.url} className="w-full h-24 object-cover rounded" />
+                      : <img src={m.url} alt="" className="w-full h-24 object-cover rounded" />}
+                    <button type="button" onClick={() => setMediaUrls((prev) => prev.filter((_, j) => j !== i))}
+                      className="absolute top-1 right-1 bg-stone-900/70 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
         </div>
 
@@ -900,7 +1075,7 @@ function CreateArticleModal({ topic, onClose, onCreated }) {
 }
 
 // ============ АДМІН-ПАНЕЛЬ ============
-function AdminPanel({ topicsMap, reloadTopics, articles }) {
+function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations }) {
   const [tab, setTab] = useState('users');
 
   return (
@@ -917,15 +1092,19 @@ function AdminPanel({ topicsMap, reloadTopics, articles }) {
         </div>
       </div>
 
-      <div className="flex gap-1 mb-6 bg-stone-100 rounded-md p-1 w-fit">
+      <div className="flex gap-1 mb-6 bg-stone-100 rounded-md p-1 w-fit flex-wrap">
         <TabBtn active={tab === 'users'} onClick={() => setTab('users')}>Користувачі</TabBtn>
         <TabBtn active={tab === 'topics'} onClick={() => setTab('topics')}>Розділи</TabBtn>
         <TabBtn active={tab === 'moderation'} onClick={() => setTab('moderation')}>Модерація</TabBtn>
+        <TabBtn active={tab === 'locations'} onClick={() => setTab('locations')}>📍 Локації</TabBtn>
+        <TabBtn active={tab === 'locreq'} onClick={() => setTab('locreq')}>📨 Запити локацій</TabBtn>
       </div>
 
       {tab === 'users' && <UsersTab />}
       {tab === 'topics' && <TopicsTab topicsMap={topicsMap} reloadTopics={reloadTopics} />}
       {tab === 'moderation' && <ModerationTab articles={articles} />}
+      {tab === 'locations' && <LocationsAdminTab allLocations={allLocations} reloadLocations={reloadLocations} />}
+      {tab === 'locreq' && <LocationRequestsTab reloadLocations={reloadLocations} />}
     </div>
   );
 }
@@ -1128,6 +1307,178 @@ function ModerationTab({ articles }) {
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ АДМІН: ЛОКАЦІЇ ============
+function LocationsAdminTab({ allLocations, reloadLocations }) {
+  const [form, setForm] = useState({ name: '', color: '#e11d48', address: '' });
+  const [error, setError] = useState('');
+  const [openId, setOpenId] = useState(null);
+  const [workers, setWorkers] = useState([]);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [assign, setAssign] = useState({ userId: '', isManager: false });
+
+  const openLocation = async (id) => {
+    setOpenId(id);
+    setWorkers(await apiGet(`/api/locations/${id}/users`));
+  };
+
+  const addLocation = async () => {
+    setError('');
+    if (!form.name.trim()) return setError('Вкажіть назву');
+    try {
+      await apiPost('/api/locations', form);
+      setForm({ name: '', color: '#e11d48', address: '' });
+      await reloadLocations();
+    } catch (e) { setError(e.message); }
+  };
+
+  const removeLocation = async (id) => {
+    setError('');
+    try {
+      await apiDelete(`/api/locations/${id}`);
+      if (openId === id) setOpenId(null);
+      await reloadLocations();
+    } catch (e) { setError(e.message); }
+  };
+
+  const detach = async (userId) => {
+    await apiDelete(`/api/admin/users/${userId}/locations/${openId}`);
+    await openLocation(openId);
+    await reloadLocations();
+  };
+
+  const openAssign = async () => {
+    setUsers(await apiGet('/api/admin/users'));
+    setAssign({ userId: '', isManager: false });
+    setAssignOpen(true);
+  };
+
+  const doAssign = async () => {
+    if (!assign.userId) return;
+    await apiPost(`/api/admin/users/${assign.userId}/locations`, { locationId: openId, isManager: assign.isManager });
+    setAssignOpen(false);
+    await openLocation(openId);
+    await reloadLocations();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white border border-stone-200 rounded-lg p-6">
+        <h3 className="text-lg text-stone-800 mb-4">Локації ({allLocations.length})</h3>
+        <div className="space-y-2">
+          {allLocations.map((l) => (
+            <div key={l.id} className="border border-stone-200 rounded">
+              <div className="flex items-center justify-between p-3">
+                <button onClick={() => (openId === l.id ? setOpenId(null) : openLocation(l.id))} className="flex items-center gap-2 text-left">
+                  <span className="w-3 h-3 rounded-full" style={{ background: l.color || '#a8a29e' }} />
+                  <span className="text-sm text-stone-800">{l.name}</span>
+                  <span className="text-xs text-stone-400">{l.userCount} людей</span>
+                </button>
+                <button onClick={() => removeLocation(l.id)} className="text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+              </div>
+              {openId === l.id && (
+                <div className="border-t border-stone-100 p-3 bg-stone-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs uppercase tracking-wider text-stone-500">Працівники</span>
+                    <button onClick={openAssign} className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1"><Plus className="w-3 h-3" />Призначити користувача</button>
+                  </div>
+                  {workers.length === 0 ? (
+                    <p className="text-sm text-stone-400 italic">Немає працівників</p>
+                  ) : workers.map((w) => (
+                    <div key={w.userLocationId} className="flex items-center justify-between py-1.5 text-sm">
+                      <span>{w.name}{w.surname ? ` ${w.surname}` : ''} {w.isManager && <span className="text-xs text-purple-600">· керівник</span>} {!w.approved && <span className="text-xs text-amber-600">· очікує</span>}</span>
+                      <button onClick={() => detach(w.userId)} className="text-xs text-stone-500 hover:text-rose-600">Зняти з локації</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+          {allLocations.length === 0 && <p className="text-sm text-stone-400 italic">Локацій ще немає</p>}
+        </div>
+      </div>
+
+      <div className="bg-white border border-stone-200 rounded-lg p-6">
+        <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-3">Додати локацію</h3>
+        <div className="grid sm:grid-cols-3 gap-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва" className="px-3 py-2 border border-stone-200 rounded-md text-sm" />
+          <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 w-full border border-stone-200 rounded-md" />
+          <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Адреса (необов.)" className="px-3 py-2 border border-stone-200 rounded-md text-sm" />
+        </div>
+        {error && <div className="mt-3 p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
+        <button onClick={addLocation} className="mt-3 px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded text-sm"><Plus className="w-4 h-4 inline mr-1" />Додати локацію</button>
+      </div>
+
+      {assignOpen && (
+        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg text-stone-800">Призначити користувача</h3>
+              <button onClick={() => setAssignOpen(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+            </div>
+            <select value={assign.userId} onChange={(e) => setAssign({ ...assign, userId: e.target.value })}
+              className="w-full px-3 py-2 border border-stone-200 rounded-md mb-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              <option value="">— оберіть користувача —</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}{u.surname ? ` ${u.surname}` : ''} ({u.email})</option>)}
+            </select>
+            <label className="flex items-center gap-2 text-sm text-stone-600 mb-4">
+              <input type="checkbox" checked={assign.isManager} onChange={(e) => setAssign({ ...assign, isManager: e.target.checked })} />
+              Керівник локації
+            </label>
+            <button onClick={doAssign} disabled={!assign.userId} className="w-full px-4 py-2 bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">Призначити</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ АДМІН: ЗАПИТИ ЛОКАЦІЙ ============
+function LocationRequestsTab({ reloadLocations }) {
+  const [reqs, setReqs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiGet('/api/admin/location-requests?status=pending').then(setReqs).finally(() => setLoading(false));
+  }, []);
+
+  const decide = async (id, status) => {
+    await apiPatch(`/api/admin/location-requests/${id}`, { status });
+    setReqs((prev) => prev.filter((r) => r.id !== id));
+    if (status === 'approved') await reloadLocations();
+  };
+
+  if (loading) return <div className="p-8 text-center text-stone-400 italic">Завантаження…</div>;
+
+  return (
+    <div className="bg-white border border-stone-200 rounded-lg p-6">
+      <h3 className="text-lg text-stone-800 mb-4">Запити локацій ({reqs.length})</h3>
+      {reqs.length === 0 ? (
+        <p className="text-sm text-stone-400 italic">Немає запитів на розгляді</p>
+      ) : (
+        <div className="space-y-3">
+          {reqs.map((r) => (
+            <div key={r.id} className="p-4 bg-stone-50 rounded border border-stone-200 flex items-center justify-between">
+              <div className="text-sm">
+                <span className="text-stone-800">{r.userName}</span>
+                <span className="text-stone-400"> → </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: r.locationColor || '#a8a29e' }} />
+                  {r.locationName}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => decide(r.id, 'approved')} className="px-3 py-1 bg-emerald-500 text-white rounded text-xs">Прийняти</button>
+                <button onClick={() => decide(r.id, 'rejected')} className="px-3 py-1 bg-stone-200 text-stone-700 rounded text-xs">Відхилити</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

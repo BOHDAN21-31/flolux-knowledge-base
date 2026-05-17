@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 import { prisma } from './db.js';
-import { seedTopics } from './seed.js';
+import { seedTopics, seedLocations } from './seed.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_ROOT = path.join(__dirname, '..');
@@ -39,6 +39,7 @@ async function main() {
 
   try {
     await seedTopics();
+    await seedLocations();
   } catch (e) {
     console.error('[startup] seed помилка:', e.message);
   }

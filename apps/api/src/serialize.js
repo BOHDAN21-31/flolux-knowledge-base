@@ -10,6 +10,12 @@ export const serializeArticle = (a) => ({
   title: a.title,
   content: a.content,
   tags: a.tags || [],
+  mediaUrls: a.mediaUrls || [],
+  locations: (a.locations || []).map((al) => ({
+    locationId: al.locationId,
+    name: al.location?.name,
+    color: al.location?.color || null,
+  })),
   author: a.authorId || 'system',
   authorRole: a.author?.assignedRole || 'tech',
   authorName: a.author?.name || 'Система',

@@ -2,13 +2,14 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { serializeArticle, serializeComment, serializeSuggestion } from '../serialize.js';
+import { wrap, isAdmin } from '../lib.js';
 
 const router = Router();
 
-const wrap = (fn) => (req, res) => fn(req, res).catch((e) => {
-  console.error(e);
-  res.status(500).json({ error: 'Внутрішня помилка сервера' });
-});
+const articleInclude = {
+  author: true,
+  locations: { include: { location: true } },
+};
 
 const normalizeTags = (tags) => {
   if (tags === undefined) return undefined;
@@ -17,12 +18,32 @@ const normalizeTags = (tags) => {
   return [];
 };
 
-// GET /api/articles?topicId=X
+const asStringArray = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : undefined);
+
+async function approvedLocationIds(userId) {
+  const links = await prisma.userLocation.findMany({
+    where: { userId, approved: true },
+    select: { locationId: true },
+  });
+  return links.map((l) => l.locationId);
+}
+
+// GET /api/articles?topicId=X — фільтр за локаціями користувача (admin бачить усе)
 router.get('/', requireAuth, wrap(async (req, res) => {
-  const where = req.query.topicId ? { topicId: String(req.query.topicId) } : {};
+  const where = {};
+  if (req.query.topicId) where.topicId = String(req.query.topicId);
+
+  if (!isAdmin(req.user)) {
+    const locIds = await approvedLocationIds(req.user.id);
+    where.OR = [
+      { locations: { none: {} } }, // глобальна стаття
+      { locations: { some: { locationId: { in: locIds } } } },
+    ];
+  }
+
   const articles = await prisma.article.findMany({
     where,
-    include: { author: true },
+    include: articleInclude,
     orderBy: { createdAt: 'desc' },
   });
   res.json(articles.map(serializeArticle));
@@ -33,12 +54,20 @@ router.get('/:id', requireAuth, wrap(async (req, res) => {
   const article = await prisma.article.findUnique({
     where: { id: req.params.id },
     include: {
-      author: true,
+      ...articleInclude,
       comments: { include: { author: true }, orderBy: { createdAt: 'asc' } },
       suggestions: { include: { author: true }, orderBy: { createdAt: 'asc' } },
     },
   });
   if (!article) return res.status(404).json({ error: 'Статтю не знайдено' });
+
+  // Перевірка доступу за локаціями (admin — завжди)
+  if (!isAdmin(req.user) && article.locations.length > 0) {
+    const locIds = await approvedLocationIds(req.user.id);
+    const visible = article.locations.some((al) => locIds.includes(al.locationId));
+    if (!visible) return res.status(403).json({ error: 'Стаття недоступна для ваших локацій' });
+  }
+
   res.json({
     ...serializeArticle(article),
     comments: article.comments.map(serializeComment),
@@ -46,15 +75,18 @@ router.get('/:id', requireAuth, wrap(async (req, res) => {
   });
 }));
 
-// POST /api/articles
+// POST /api/articles { topicId, section, title, content, tags, locationIds, mediaUrls }
 router.post('/', requireAuth, wrap(async (req, res) => {
-  if (!req.user.approved && req.user.assignedRole !== 'admin') {
+  if (!req.user.approved && !isAdmin(req.user)) {
     return res.status(403).json({ error: 'Акаунт ще не підтверджено' });
   }
   const { topicId, section, title, content } = req.body || {};
   if (!topicId || !title || !content) {
     return res.status(400).json({ error: 'Потрібні topicId, title і content' });
   }
+  const locationIds = asStringArray(req.body?.locationIds) || [];
+  const mediaUrls = asStringArray(req.body?.mediaUrls) || [];
+
   const article = await prisma.article.create({
     data: {
       topicId,
@@ -62,9 +94,11 @@ router.post('/', requireAuth, wrap(async (req, res) => {
       title,
       content,
       tags: normalizeTags(req.body.tags) || [],
+      mediaUrls,
       authorId: req.user.id,
+      locations: { create: locationIds.map((locationId) => ({ locationId })) },
     },
-    include: { author: true },
+    include: articleInclude,
   });
   res.json(serializeArticle(article));
 }));
@@ -73,7 +107,7 @@ router.post('/', requireAuth, wrap(async (req, res) => {
 router.patch('/:id', requireAuth, wrap(async (req, res) => {
   const existing = await prisma.article.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: 'Статтю не знайдено' });
-  if (existing.authorId !== req.user.id && req.user.assignedRole !== 'admin') {
+  if (existing.authorId !== req.user.id && !isAdmin(req.user)) {
     return res.status(403).json({ error: 'Немає прав на редагування' });
   }
   const data = {};
@@ -81,11 +115,21 @@ router.patch('/:id', requireAuth, wrap(async (req, res) => {
   if (req.body?.content !== undefined) data.content = req.body.content;
   const tags = normalizeTags(req.body?.tags);
   if (tags !== undefined) data.tags = tags;
+  const mediaUrls = asStringArray(req.body?.mediaUrls);
+  if (mediaUrls !== undefined) data.mediaUrls = mediaUrls;
+
+  const locationIds = asStringArray(req.body?.locationIds);
+  if (locationIds !== undefined) {
+    data.locations = {
+      deleteMany: {},
+      create: locationIds.map((locationId) => ({ locationId })),
+    };
+  }
 
   const article = await prisma.article.update({
     where: { id: req.params.id },
     data,
-    include: { author: true },
+    include: articleInclude,
   });
   res.json(serializeArticle(article));
 }));
@@ -94,7 +138,7 @@ router.patch('/:id', requireAuth, wrap(async (req, res) => {
 router.delete('/:id', requireAuth, wrap(async (req, res) => {
   const existing = await prisma.article.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: 'Статтю не знайдено' });
-  if (existing.authorId !== req.user.id && req.user.assignedRole !== 'admin') {
+  if (existing.authorId !== req.user.id && !isAdmin(req.user)) {
     return res.status(403).json({ error: 'Немає прав на видалення' });
   }
   await prisma.article.delete({ where: { id: req.params.id } });

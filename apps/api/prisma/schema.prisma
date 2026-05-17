@@ -12,6 +12,10 @@ model User {
   email         String       @unique
   passwordHash  String
   name          String
+  surname       String?
+  avatarUrl     String?
+  phone         String?
+  rating        Int          @default(0)
   requestedRole String?
   assignedRole  String?
   approved      Boolean      @default(false)
@@ -19,6 +23,9 @@ model User {
   articles      Article[]
   comments      Comment[]
   suggestions   Suggestion[]
+  locations     UserLocation[]
+  locationReqs  LocationRequest[]
+  webauthn      WebAuthnCredential[]
 }
 
 model Topic {
@@ -40,12 +47,14 @@ model Article {
   title       String
   content     String
   tags        String[]
+  mediaUrls   String[]     @default([])
   authorId    String?
   author      User?        @relation(fields: [authorId], references: [id])
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   comments    Comment[]
   suggestions Suggestion[]
+  locations   ArticleLocation[]
 
   @@index([topicId])
 }
@@ -73,4 +82,60 @@ model Suggestion {
   createdAt DateTime @default(now())
 
   @@index([articleId])
+}
+
+model Location {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  slug      String            @unique
+  color     String?
+  address   String?
+  createdAt DateTime          @default(now())
+  users     UserLocation[]
+  requests  LocationRequest[]
+  articles  ArticleLocation[]
+}
+
+model UserLocation {
+  id         String   @id @default(cuid())
+  userId     String
+  locationId String
+  isManager  Boolean  @default(false)
+  approved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, locationId])
+}
+
+model LocationRequest {
+  id         String   @id @default(cuid())
+  userId     String
+  locationId String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+model ArticleLocation {
+  id         String   @id @default(cuid())
+  articleId  String
+  locationId String
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, locationId])
+}
+
+model WebAuthnCredential {
+  id           String   @id @default(cuid())
+  userId       String
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      Int      @default(0)
+  deviceName   String?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
