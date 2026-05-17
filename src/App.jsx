@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Trash2, Check, X, Search, Settings, ChevronRight, Users, FileText, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag } from 'lucide-react';
 
 // ============ КОНСТАНТИ ============
@@ -280,30 +280,21 @@ macOS вимагає окремі дозволи. Без них AnyDesk підк
 
 // ============ ХУКИ ============
 function useStorage(key, defaultValue) {
-  const [value, setValue] = useState(defaultValue);
-  const initialized = useRef(false);
+  const [value, setValue] = useState(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw !== null ? JSON.parse(raw) : defaultValue;
+    } catch (e) {
+      // ключа немає або битий JSON — використовуємо defaultValue
+      return defaultValue;
+    }
+  });
+  const initialized = useRef(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await Promise.resolve({value: localStorage.getItem(key)});
-        if (!cancelled && r) {
-          setValue(JSON.parse(r.value));
-        }
-      } catch (e) {
-        // ключа немає — використовуємо defaultValue
-      } finally {
-        initialized.current = true;
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [key]);
-
-  const persist = async (newVal) => {
+  const persist = (newVal) => {
     setValue(newVal);
     try {
-      await Promise.resolve(localStorage.setItem(key, JSON.stringify(newVal)));
+      localStorage.setItem(key, JSON.stringify(newVal));
     } catch (e) {
       console.error('Storage error:', e);
     }
