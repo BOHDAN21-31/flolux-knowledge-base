@@ -1,15 +1,12 @@
 {
-  "name": "flolux-monorepo",
+  "name": "flolux",
   "private": true,
-  "version": "0.0.0",
-  "workspaces": [
-    "apps/web",
-    "apps/api"
-  ],
+  "workspaces": ["apps/*"],
   "scripts": {
-    "dev:web": "npm run dev --workspace apps/web",
-    "dev:api": "npm run dev --workspace apps/api",
-    "build": "npm run build --workspace apps/web && npm run copy:web --workspace apps/api",
-    "start": "npm run start --workspace apps/api"
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "build": "npm run build --workspace=apps/web && cp -r apps/web/dist apps/api/public",
+    "start": "npm run start --workspace=apps/api",
+    "postinstall": "npm run prisma:generate --workspace=apps/api"
   }
 }

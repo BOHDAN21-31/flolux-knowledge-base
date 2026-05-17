@@ -1,23 +1,19 @@
-// API-клієнт Flolux. JWT зберігається в localStorage і додається в Authorization.
+// API-клієнт Flolux. JWT-токен зберігається в localStorage під ключем "token"
+// і додається в кожен запит як Authorization: Bearer.
+// При 401 токен видаляється і кидається подія "flolux:unauthorized".
 
-const TOKEN_KEY = 'flolux:token';
-const BASE = '/api';
+const TOKEN_KEY = 'token';
+export const UNAUTHORIZED_EVENT = 'flolux:unauthorized';
 
 export function getToken() {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
+  try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
 }
 
 export function setToken(token) {
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 }
 
 export function clearToken() {
@@ -30,20 +26,24 @@ async function request(method, path, body) {
   if (token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(path, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
+  if (res.status === 401) {
+    clearToken();
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    const err = new Error('Сесія завершилася. Увійдіть знову.');
+    err.status = 401;
+    throw err;
+  }
+
   let data = null;
   const text = await res.text();
   if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { error: text };
-    }
+    try { data = JSON.parse(text); } catch { data = { error: text }; }
   }
 
   if (!res.ok) {

@@ -8,7 +8,7 @@ export default defineConfig({
     proxy: {
       // У дев-режимі /api проксі на локальний бекенд (npm run dev:api)
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:3000',
         changeOrigin: true,
       },
     },

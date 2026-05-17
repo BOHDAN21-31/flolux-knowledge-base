@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Trash2, Check, X, Search, Settings, ChevronRight, Users, FileText, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase } from 'lucide-react';
-import { apiGet, apiPost, apiPatch, apiDelete, setToken, clearToken, getToken } from './api';
+import { apiGet, apiPost, apiPatch, apiDelete, setToken, clearToken, getToken, UNAUTHORIZED_EVENT } from './api';
 
 // ============ КОНСТАНТИ ============
 const REFERRAL_WORD = 'Flolux';
@@ -51,16 +51,28 @@ export default function FloluxKB() {
   useEffect(() => {
     const t = getToken();
     if (!t) { setAuthChecked(true); return; }
-    apiGet('/auth/me')
+    apiGet('/api/auth/me')
       .then((r) => setCurrentUser(r.user))
       .catch(() => clearToken())
       .finally(() => setAuthChecked(true));
   }, []);
 
+  // Глобальний вихід при 401 (протермінований/невалідний токен)
+  useEffect(() => {
+    const onUnauthorized = () => {
+      setCurrentUser(null);
+      setView('home');
+      setActiveTopic(null);
+      setActiveArticle(null);
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, []);
+
   // Завантаження даних після входу
   useEffect(() => {
     if (!currentUser) { setDataLoaded(false); return; }
-    Promise.all([apiGet('/topics'), apiGet('/articles')])
+    Promise.all([apiGet('/api/topics'), apiGet('/api/articles')])
       .then(([topics, arts]) => {
         setTopicsMap(groupTopics(topics));
         setArticles(arts);
@@ -70,12 +82,12 @@ export default function FloluxKB() {
   }, [currentUser]);
 
   const reloadArticles = async () => {
-    const arts = await apiGet('/articles');
+    const arts = await apiGet('/api/articles');
     setArticles(arts);
     return arts;
   };
   const reloadTopics = async () => {
-    const topics = await apiGet('/topics');
+    const topics = await apiGet('/api/topics');
     setTopicsMap(groupTopics(topics));
   };
 
@@ -200,7 +212,7 @@ function AuthScreen({ mode, setMode, onSuccess }) {
     if (!form.email || !form.password) return setError('Заповніть всі поля');
     setBusy(true);
     try {
-      const r = await apiPost('/auth/login', { email: form.email, password: form.password });
+      const r = await apiPost('/api/auth/login', { email: form.email, password: form.password });
       setToken(r.token);
       onSuccess(r.user);
     } catch (e) {
@@ -220,19 +232,16 @@ function AuthScreen({ mode, setMode, onSuccess }) {
       return setError('Пароль має містити мінімум 6 символів');
     setBusy(true);
     try {
-      const r = await apiPost('/auth/register', {
+      const r = await apiPost('/api/auth/register', {
         referralWord: form.referral,
         name: form.name,
         email: form.email,
         password: form.password,
         requestedRole: form.requestedRole,
       });
-      if (r.token) {
-        setToken(r.token);
-        onSuccess(r.user);
-        return;
-      }
-      setSuccess(r.message || 'Реєстрація успішна. Очікуйте підтвердження адміністратора.');
+      setSuccess(r.approved
+        ? 'Реєстрація успішна. Ви — перший користувач (адміністратор). Увійдіть під своїм e-mail.'
+        : 'Реєстрація успішна. Очікуйте підтвердження адміністратора та призначення ролі.');
       setForm({ email: '', password: '', name: '', referral: '', requestedRole: 'florist', resetEmail: '' });
       setTimeout(() => setMode('login'), 3000);
     } catch (e) {
@@ -611,8 +620,8 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
   useEffect(() => {
     let active = true;
     Promise.all([
-      apiGet(`/articles/${article.id}/comments`),
-      apiGet(`/articles/${article.id}/suggestions`),
+      apiGet(`/api/articles/${article.id}/comments`),
+      apiGet(`/api/articles/${article.id}/suggestions`),
     ]).then(([c, s]) => {
       if (!active) return;
       setComments(c);
@@ -623,27 +632,27 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
 
   const handleComment = async () => {
     if (!commentText.trim()) return;
-    const c = await apiPost(`/articles/${article.id}/comments`, { content: commentText });
+    const c = await apiPost(`/api/articles/${article.id}/comments`, { content: commentText });
     setComments((prev) => [...prev, c]);
     setCommentText('');
   };
 
   const handleSuggestion = async () => {
     if (!suggestionText.trim()) return;
-    const s = await apiPost(`/articles/${article.id}/suggestions`, { content: suggestionText });
+    const s = await apiPost(`/api/articles/${article.id}/suggestions`, { content: suggestionText });
     setSuggestions((prev) => [...prev, s]);
     setSuggestionText('');
     setShowSuggest(false);
   };
 
   const handleSaveEdit = async () => {
-    const updated = await apiPatch(`/articles/${article.id}`, editForm);
+    const updated = await apiPatch(`/api/articles/${article.id}`, editForm);
     setEditMode(false);
     await onArticleUpdated(updated);
   };
 
   const setSuggStatus = async (sugg, status) => {
-    const updated = await apiPatch(`/suggestions/${sugg.id}`, { status });
+    const updated = await apiPatch(`/api/suggestions/${sugg.id}`, { status });
     setSuggestions((prev) => prev.map((s) => (s.id === sugg.id ? updated : s)));
   };
 
@@ -830,7 +839,7 @@ function CreateArticleModal({ topic, onClose, onCreated }) {
     }
     setBusy(true);
     try {
-      await apiPost('/articles', {
+      await apiPost('/api/articles', {
         topicId: topic.id,
         section: topic.id.startsWith('tc-') ? 'tech' : 'role',
         title: form.title,
@@ -934,11 +943,11 @@ function UsersTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiGet('/admin/users').then(setUsers).catch((e) => console.error(e)).finally(() => setLoading(false));
+    apiGet('/api/admin/users').then(setUsers).catch((e) => console.error(e)).finally(() => setLoading(false));
   }, []);
 
   const updateUser = async (id, changes) => {
-    const updated = await apiPatch(`/admin/users/${id}`, changes);
+    const updated = await apiPatch(`/api/admin/users/${id}`, changes);
     setUsers((prev) => prev.map((u) => (u.id === id ? updated : u)));
   };
 
@@ -1016,7 +1025,12 @@ function TopicsTab({ topicsMap, reloadTopics }) {
     if (!newTopic.title.trim()) return;
     setBusy(true);
     try {
-      await apiPost('/topics', { roleKey: selectedRole, title: newTopic.title, description: newTopic.description });
+      await apiPost('/api/topics', {
+        id: `${selectedRole}-${Date.now()}`,
+        roleKey: selectedRole,
+        title: newTopic.title,
+        description: newTopic.description,
+      });
       setNewTopic({ title: '', description: '' });
       await reloadTopics();
     } finally {
@@ -1025,7 +1039,7 @@ function TopicsTab({ topicsMap, reloadTopics }) {
   };
 
   const handleDelete = async (id) => {
-    await apiDelete(`/topics/${id}`);
+    await apiDelete(`/api/topics/${id}`);
     await reloadTopics();
   };
 
@@ -1081,11 +1095,11 @@ function ModerationTab({ articles }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiGet('/suggestions?status=pending').then(setPending).catch((e) => console.error(e)).finally(() => setLoading(false));
+    apiGet('/api/suggestions?status=pending').then(setPending).catch((e) => console.error(e)).finally(() => setLoading(false));
   }, []);
 
   const decide = async (id, status) => {
-    await apiPatch(`/suggestions/${id}`, { status });
+    await apiPatch(`/api/suggestions/${id}`, { status });
     setPending((prev) => prev.filter((s) => s.id !== id));
   };
 
