@@ -36,6 +36,8 @@ router.post('/register', wrap(async (req, res) => {
       requestedRole: isFirstUser ? null : requestedRole,
       assignedRole: isFirstUser ? 'admin' : null,
       approved: isFirstUser,
+      // Перший користувач — адмін: одразу даємо роль у UserRole (джерело істини).
+      roles: isFirstUser ? { create: { role: 'admin' } } : undefined,
     },
   });
 
@@ -47,7 +49,10 @@ router.post('/login', wrap(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Заповніть усі поля' });
 
-  const user = await prisma.user.findUnique({ where: { email: String(email).toLowerCase().trim() } });
+  const user = await prisma.user.findUnique({
+    where: { email: String(email).toLowerCase().trim() },
+    include: { roles: true },
+  });
   if (!user) return res.status(401).json({ error: 'Користувача не знайдено' });
 
   const ok = await bcrypt.compare(String(password), user.passwordHash);

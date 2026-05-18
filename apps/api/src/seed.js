@@ -17,13 +17,22 @@ export async function seedTopics() {
 }
 
 const LOCATIONS = [
-  { name: 'Позняки', slug: 'poznyaky', color: '#e11d48' },
+  { name: 'КОНОВАЛЬЦЯ', slug: 'konovaltsya', color: '#e11d48' },
+  { name: 'РЕТРО', slug: 'retro', color: '#8b5cf6' },
   { name: 'КТ', slug: 'kt', color: '#f59e0b' },
-  { name: 'ВЛ16', slug: 'vl16', color: '#10b981' },
-  { name: 'Оболонь', slug: 'obolon', color: '#3b82f6' },
-  { name: 'Ретро.Склад', slug: 'retro-sklad', color: '#8b5cf6' },
-  { name: 'Кон.Фенси', slug: 'kon-fensi', color: '#ec4899' },
-  { name: 'Максимовича', slug: 'maksymovycha', color: '#14b8a6' },
+  { name: 'ВЛ', slug: 'vl', color: '#10b981' },
+  { name: 'ПИМОНЕНКА', slug: 'pymonenka', color: '#0ea5e9' },
+  { name: 'ПОЗНЯКИ', slug: 'poznyaky', color: '#dc2626' },
+  { name: 'ОБОЛОНЬ', slug: 'obolon', color: '#3b82f6' },
+  { name: 'ФЕНСІ', slug: 'fensi', color: '#ec4899' },
+  { name: 'РІВНЕ', slug: 'rivne', color: '#14b8a6' },
+  { name: 'ВИННИЧЕНКА Львів', slug: 'vynnychenka-lviv', color: '#f97316' },
+  { name: 'АНТОНОВИЧА Львів', slug: 'antonovycha-lviv', color: '#84cc16' },
+  { name: 'ВОВЧИНЕЦЬКА Франик', slug: 'vovchynetska-franyk', color: '#06b6d4' },
+  { name: 'ЧОРНОВОЛА Франковськ', slug: 'chornovola-frankovsk', color: '#a855f7' },
+  { name: 'Стрийська Львів', slug: 'stryjska-lviv', color: '#22c55e' },
+  { name: 'Хмельницького Львів', slug: 'khmelnytskoho-lviv', color: '#eab308' },
+  { name: 'Бухгалтерія', slug: 'buhgalteriya', color: '#64748b' },
 ];
 
 // Сід дефолтних локацій. Виконується лише якщо таблиця Location порожня.

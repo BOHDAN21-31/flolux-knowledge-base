@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { requireAuth, publicUser } from '../auth.js';
-import { wrap } from '../lib.js';
+import { wrap, logAction } from '../lib.js';
 
 const router = Router();
 
@@ -13,6 +13,7 @@ async function fullProfile(userId) {
       locations: { include: { location: true }, orderBy: { createdAt: 'asc' } },
       locationReqs: { include: { location: true }, orderBy: { createdAt: 'desc' } },
       webauthn: true,
+      roles: true,
     },
   });
   if (!u) return null;
@@ -106,6 +107,20 @@ router.post('/me/locations/request', requireAuth, wrap(async (req, res) => {
     data: { userId: req.user.id, locationId, status: 'pending' },
   });
   res.json({ id: created.id, locationId, status: created.status });
+}));
+
+// DELETE /api/users/me/locations/:locationId — користувач сам відкріплює локацію
+router.delete('/me/locations/:locationId', requireAuth, wrap(async (req, res) => {
+  const { count } = await prisma.userLocation.deleteMany({
+    where: { userId: req.user.id, locationId: req.params.locationId },
+  });
+  if (count === 0) return res.status(404).json({ error: 'Локацію не знайдено серед ваших' });
+  // Прибираємо й застряглі pending-запити на цю локацію
+  await prisma.locationRequest.deleteMany({
+    where: { userId: req.user.id, locationId: req.params.locationId, status: 'pending' },
+  });
+  await logAction(req.user.id, 'user.location_left', 'location', req.params.locationId);
+  res.json({ ok: true });
 }));
 
 export default router;

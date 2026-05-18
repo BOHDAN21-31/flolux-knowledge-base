@@ -1,27 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Trash2, Check, X, Search, Settings, ChevronRight, Users, FileText, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint } from 'lucide-react';
-import { apiGet, apiPost, apiPatch, apiDelete, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
+import { useState, useEffect, useRef } from 'react';
+import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint } from 'lucide-react';
+import { apiGet, apiPost, apiPatch, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
+import AdminPanel from './components/AdminPanel';
+import Stars from './Stars';
+import { ROLES, REGISTER_ROLES, ROLE_KEYS, roleName, userRoles, isAdminUser } from './roles';
+import { iconFor } from './icons';
 
 // ============ КОНСТАНТИ ============
 const REFERRAL_WORD = 'Flolux';
-
-const ROLES = {
-  admin: { name: 'Адміністратор', color: 'bg-rose-100 text-rose-800 border-rose-300', icon: Shield },
-  florist: { name: 'Флорист', color: 'bg-pink-100 text-pink-800 border-pink-300', icon: Flower2 },
-  location_manager: { name: 'Управляючий локації', color: 'bg-purple-100 text-purple-800 border-purple-300', icon: Users },
-  warehouse: { name: 'Складський працівник', color: 'bg-amber-100 text-amber-800 border-amber-300', icon: FileText },
-  accountant: { name: 'Бухгалтер', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', icon: FileText },
-  wholesale: { name: 'Оптовий менеджер', color: 'bg-blue-100 text-blue-800 border-blue-300', icon: Users },
-  courier: { name: 'Кур\'єр', color: 'bg-orange-100 text-orange-800 border-orange-300', icon: Users },
-  logist: { name: 'Логіст', color: 'bg-cyan-100 text-cyan-800 border-cyan-300', icon: Users },
-  barista: { name: 'Бариста', color: 'bg-stone-100 text-stone-800 border-stone-300', icon: Users },
-  driver: { name: 'Водій вантажного авто', color: 'bg-slate-100 text-slate-800 border-slate-300', icon: Users },
-  tech: { name: 'Технічна підтримка', color: 'bg-indigo-100 text-indigo-800 border-indigo-300', icon: Wrench }
-};
-
-// Ролі для реєстрації — всі, крім admin
-const REGISTER_ROLES = Object.entries(ROLES).filter(([key]) => key !== 'admin');
 
 const articleWord = (count) => (count === 1 ? 'стаття' : count >= 2 && count <= 4 ? 'статті' : 'статей');
 
@@ -126,7 +113,7 @@ export default function FloluxKB() {
 
   if (!dataLoaded) return <Splash text="Готуємо вашу базу знань..." />;
 
-  const isAdmin = currentUser.role === 'admin';
+  const isAdmin = isAdminUser(currentUser);
 
   return (
     <div className="min-h-screen bg-stone-50" style={{ fontFamily: 'Georgia, "Playfair Display", serif' }}>
@@ -146,6 +133,7 @@ export default function FloluxKB() {
             topics={topicsMap}
             articles={articles}
             allLocations={allLocations}
+            isAdmin={isAdmin}
             onTopicClick={(t) => { setActiveTopic(t); setView('topic'); }}
             onGoProfile={() => setView('profile')}
           />
@@ -174,6 +162,7 @@ export default function FloluxKB() {
             articles={articles}
             allLocations={allLocations}
             reloadLocations={reloadLocations}
+            reloadArticles={reloadArticles}
           />
         )}
 
@@ -426,7 +415,12 @@ function Field({ icon: Icon, label, type, value, onChange, hint, rightIcon: Righ
 
 // ============ HEADER ============
 function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
-  const RoleIcon = ROLES[user.role]?.icon || User;
+  const roles = userRoles(user);
+  const primary = isAdmin ? 'admin' : (user.role || roles[0] || null);
+  const RoleIcon = ROLES[primary]?.icon || User;
+  const roleLabel = primary
+    ? `${ROLES[primary]?.name || 'Без ролі'}${roles.length > 1 ? ` +${roles.length - 1}` : ''}`
+    : 'Без ролі';
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-30">
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -442,7 +436,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
           </button>
 
           <nav className="flex items-center gap-1">
-            <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>Моя бібліотека</NavBtn>
+            <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{isAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</NavBtn>
             <NavBtn active={view === 'tech'} onClick={() => onNavigate('tech')} icon={Wrench}>Технічка</NavBtn>
             {isAdmin && <NavBtn active={view === 'admin'} onClick={() => onNavigate('admin')} icon={Shield}>Адмін</NavBtn>}
           </nav>
@@ -453,9 +447,9 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
             <div className="text-sm text-stone-700 group-hover:text-rose-600 transition" style={{ fontFamily: 'system-ui, sans-serif' }}>
               {user.name}{user.surname ? ` ${user.surname}` : ''}
             </div>
-            <div className="text-xs text-stone-500">{ROLES[user.role]?.name || 'Без ролі'}</div>
+            <div className="text-xs text-stone-500">{roleLabel}</div>
           </button>
-          <button onClick={onProfile} className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden ${ROLES[user.role]?.color || 'bg-stone-100 text-stone-600'} border`} title="Мій профіль">
+          <button onClick={onProfile} className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden ${ROLES[primary]?.color || 'bg-stone-100 text-stone-600'} border`} title="Мій профіль">
             {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : <RoleIcon className="w-4 h-4" />}
           </button>
           <button onClick={onLogout} className="p-2 text-stone-400 hover:text-rose-500 transition" title="Вийти">
@@ -478,8 +472,11 @@ function NavBtn({ active, onClick, icon: Icon, children }) {
 }
 
 // ============ ГОЛОВНА ============
-function HomeView({ user, topics, articles, allLocations = [], onTopicClick, onGoProfile }) {
-  if (!user.role) {
+function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicClick, onGoProfile }) {
+  const roles = userRoles(user);
+  const [roleFilter, setRoleFilter] = useState('all');
+
+  if (!isAdmin && roles.length === 0) {
     return (
       <div className="text-center py-16">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-50 mb-4">
@@ -494,66 +491,100 @@ function HomeView({ user, topics, articles, allLocations = [], onTopicClick, onG
     );
   }
 
-  const userTopics = topics[user.role] || [];
+  // admin бачить усі ролі групами; інші — лише свої.
+  const baseRoles = isAdmin ? ROLE_KEYS : roles;
+  const shownRoles = (roleFilter === 'all' ? baseRoles : [roleFilter]).filter((r) => (topics[r] || []).length > 0);
+  const allShownTopics = shownRoles.flatMap((r) => topics[r] || []);
   const recentArticles = articles
-    .filter((a) => userTopics.some((t) => t.id === a.topicId))
+    .filter((a) => allShownTopics.some((t) => t.id === a.topicId))
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 3);
+
+  const approved = (user.locations || []).filter((l) => l.approved);
+  // userCount з бекенду включає мене -> для моїх локацій мінус я сам.
+  const countFor = (id) => Math.max(0, (allLocations.find((x) => x.id === id)?.userCount ?? 0) - 1);
 
   return (
     <div>
       <div className="mb-10 pb-6 border-b border-stone-200">
         <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">Вітаємо</p>
         <h1 className="text-4xl text-stone-800 mb-2">{user.name}</h1>
-        <p className="text-stone-500 italic">Ваш робочий простір — {ROLES[user.role]?.name.toLowerCase()}</p>
+        <p className="text-stone-500 italic">
+          {isAdmin ? 'Уся бібліотека знань Flolux' : `Ваші ролі — ${roles.map(roleName).join(', ').toLowerCase()}`}
+        </p>
       </div>
 
-      {(() => {
-        const approved = (user.locations || []).filter((l) => l.approved);
-        const countFor = (id) => allLocations.find((x) => x.id === id)?.userCount ?? 0;
-        return (
-          <div className="mb-12">
-            <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4 flex items-center gap-2"><MapPin className="w-3.5 h-3.5" /> Мої локації</h2>
-            {approved.length === 0 ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-5 flex items-center justify-between">
-                <p className="text-sm text-amber-800 italic">У вас немає підтверджених локацій. Запросіть локацію у профілі.</p>
-                <button onClick={onGoProfile} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm whitespace-nowrap">Запросити локацію</button>
-              </div>
-            ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {approved.map((l) => (
-                  <div key={l.locationId} className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-stone-800">
-                      <span className="w-3 h-3 rounded-full" style={{ background: l.color || '#a8a29e' }} />
-                      {l.name}{l.isManager ? ' · керівник' : ''}
-                    </span>
-                    <span className="text-sm text-stone-500">{countFor(l.locationId)} людей</span>
-                  </div>
-                ))}
-              </div>
-            )}
+      <div className="mb-12">
+        <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4 flex items-center gap-2"><MapPin className="w-3.5 h-3.5" /> Мої локації</h2>
+        {approved.length === 0 ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-5 flex items-center justify-between">
+            <p className="text-sm text-amber-800 italic">У вас немає підтверджених локацій. Запросіть локацію у профілі.</p>
+            <button onClick={onGoProfile} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm whitespace-nowrap">Запросити локацію</button>
           </div>
-        );
-      })()}
-
-      <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4">Розділи знань для вашої ролі</h2>
-      <div className="grid md:grid-cols-2 gap-4 mb-12">
-        {userTopics.map((topic) => {
-          const count = articles.filter((a) => a.topicId === topic.id).length;
-          return (
-            <button key={topic.id} onClick={() => onTopicClick(topic)}
-              className="text-left bg-white border border-stone-200 rounded-lg p-6 hover:border-rose-300 hover:shadow-md transition group">
-              <div className="flex items-start justify-between mb-3">
-                <h3 className="text-xl text-stone-800 group-hover:text-rose-600 transition">{topic.title}</h3>
-                <ChevronRight className="w-5 h-5 text-stone-300 group-hover:text-rose-400 group-hover:translate-x-1 transition" />
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {approved.map((l) => (
+              <div key={l.locationId} className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
+                <span className="flex items-center gap-2 text-stone-800">
+                  <span className="w-3 h-3 rounded-full" style={{ background: l.color || '#a8a29e' }} />
+                  {l.name}{l.isManager ? ' · керівник' : ''}
+                </span>
+                <span className="text-sm text-stone-500">{countFor(l.locationId)} {countFor(l.locationId) === 1 ? 'колега' : 'колег'} на локації</span>
               </div>
-              <p className="text-sm text-stone-500 italic mb-3">{topic.description}</p>
-              <p className="text-xs text-stone-400">{count} {articleWord(count)}</p>
-            </button>
-          );
-        })}
-        {userTopics.length === 0 && (
-          <p className="text-stone-400 italic col-span-2">Для вашої ролі ще немає розділів.</p>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xs uppercase tracking-widest text-stone-400">
+          {isAdmin ? 'Усі розділи знань' : 'Розділи знань для ваших ролей'}
+        </h2>
+        {baseRoles.length > 1 && (
+          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
+            className="text-sm border border-stone-200 rounded-md px-3 py-1.5 bg-white" style={{ fontFamily: 'system-ui, sans-serif' }}>
+            <option value="all">Усе</option>
+            {baseRoles.map((r) => <option key={r} value={r}>{roleName(r)}</option>)}
+          </select>
+        )}
+      </div>
+
+      <div className="space-y-10 mb-12">
+        {shownRoles.map((rk) => (
+          <div key={rk}>
+            {(shownRoles.length > 1) && (
+              <h3 className="text-sm text-stone-600 mb-3 flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-full text-xs border ${ROLES[rk]?.color || 'bg-stone-100'}`}>{roleName(rk)}</span>
+              </h3>
+            )}
+            <div className="grid md:grid-cols-2 gap-4">
+              {(topics[rk] || []).map((topic) => {
+                const count = articles.filter((a) => a.topicId === topic.id).length;
+                const Ico = iconFor(topic.icon);
+                return (
+                  <button key={topic.id} onClick={() => onTopicClick(topic)}
+                    className="text-left bg-white border border-stone-200 rounded-lg p-6 hover:border-rose-300 hover:shadow-md transition group">
+                    <div className="flex items-start gap-4">
+                      <div className="w-11 h-11 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0 group-hover:bg-rose-100 transition">
+                        <Ico className="w-5 h-5 text-rose-500" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between mb-1">
+                          <h3 className="text-xl text-stone-800 group-hover:text-rose-600 transition">{topic.title}</h3>
+                          <ChevronRight className="w-5 h-5 text-stone-300 group-hover:text-rose-400 group-hover:translate-x-1 transition" />
+                        </div>
+                        <p className="text-sm text-stone-500 italic mb-2">{topic.description}</p>
+                        <p className="text-xs text-stone-400">{count} {articleWord(count)}</p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        {shownRoles.length === 0 && (
+          <p className="text-stone-400 italic">Розділів ще немає.</p>
         )}
       </div>
 
@@ -601,7 +632,7 @@ function TechView({ topics, articles, onTopicClick }) {
         {topics.map((topic) => {
           const count = articles.filter((a) => a.topicId === topic.id).length;
           const iconMap = { 'tc-1': Printer, 'tc-2': Monitor, 'tc-3': Wifi, 'tc-4': Wifi, 'tc-5': Settings };
-          const Icon = iconMap[topic.id] || Wrench;
+          const Icon = topic.icon ? iconFor(topic.icon, Wrench) : (iconMap[topic.id] || Wrench);
           return (
             <button key={topic.id} onClick={() => onTopicClick(topic)}
               className="text-left bg-white border border-stone-200 rounded-lg p-6 hover:border-indigo-300 hover:shadow-md transition group">
@@ -743,6 +774,14 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
     setSuggestions((prev) => prev.map((s) => (s.id === sugg.id ? updated : s)));
   };
 
+  const rateSuggestion = async (sugg, rating) => {
+    const updated = await apiPost(`/api/suggestions/${sugg.id}/rate`, { rating });
+    setSuggestions((prev) =>
+      prev
+        .map((s) => (s.id === sugg.id ? updated : s))
+        .sort((a, b) => b.ratingAvg - a.ratingAvg || b.createdAt - a.createdAt));
+  };
+
   return (
     <div>
       <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800 mb-6 transition">
@@ -855,7 +894,7 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <span className="text-sm text-stone-700">{s.authorName}</span>
-                    <span className="text-xs text-stone-400 ml-2">{ROLES[s.authorRole]?.name}</span>
+                    <span className="text-xs text-stone-400 ml-2">{roleName(s.authorRole)}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {s.status === 'approved' && <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded">Прийнято</span>}
@@ -868,7 +907,8 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
                     )}
                   </div>
                 </div>
-                <p className="text-sm text-stone-700" style={{ fontFamily: 'system-ui, sans-serif' }}>{s.content}</p>
+                <p className="text-sm text-stone-700 mb-2" style={{ fontFamily: 'system-ui, sans-serif' }}>{s.content}</p>
+                <Stars avg={s.ratingAvg ?? 0} mine={s.myRating ?? null} count={s.ratingCount ?? 0} onRate={(n) => rateSuggestion(s, n)} />
               </div>
             ))}
           </div>
@@ -1070,417 +1110,6 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ============ АДМІН-ПАНЕЛЬ ============
-function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations }) {
-  const [tab, setTab] = useState('users');
-
-  return (
-    <div>
-      <div className="mb-8 pb-6 border-b border-stone-200">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-12 h-12 rounded-lg bg-rose-50 flex items-center justify-center border border-rose-200">
-            <Shield className="w-6 h-6 text-rose-500" />
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">Управління системою</p>
-            <h1 className="text-3xl text-stone-800">Адмін-панель</h1>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex gap-1 mb-6 bg-stone-100 rounded-md p-1 w-fit flex-wrap">
-        <TabBtn active={tab === 'users'} onClick={() => setTab('users')}>Користувачі</TabBtn>
-        <TabBtn active={tab === 'topics'} onClick={() => setTab('topics')}>Розділи</TabBtn>
-        <TabBtn active={tab === 'moderation'} onClick={() => setTab('moderation')}>Модерація</TabBtn>
-        <TabBtn active={tab === 'locations'} onClick={() => setTab('locations')}>📍 Локації</TabBtn>
-        <TabBtn active={tab === 'locreq'} onClick={() => setTab('locreq')}>📨 Запити локацій</TabBtn>
-      </div>
-
-      {tab === 'users' && <UsersTab />}
-      {tab === 'topics' && <TopicsTab topicsMap={topicsMap} reloadTopics={reloadTopics} />}
-      {tab === 'moderation' && <ModerationTab articles={articles} />}
-      {tab === 'locations' && <LocationsAdminTab allLocations={allLocations} reloadLocations={reloadLocations} />}
-      {tab === 'locreq' && <LocationRequestsTab reloadLocations={reloadLocations} />}
-    </div>
-  );
-}
-
-function TabBtn({ active, onClick, children }) {
-  return (
-    <button onClick={onClick} className={`px-4 py-2 rounded text-sm transition ${active ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700'}`}>
-      {children}
-    </button>
-  );
-}
-
-function UsersTab() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    apiGet('/api/admin/users').then(setUsers).catch((e) => console.error(e)).finally(() => setLoading(false));
-  }, []);
-
-  const updateUser = async (id, changes) => {
-    const updated = await apiPatch(`/api/admin/users/${id}`, changes);
-    setUsers((prev) => prev.map((u) => (u.id === id ? updated : u)));
-  };
-
-  if (loading) return <div className="p-8 text-center text-stone-400 italic">Завантаження…</div>;
-
-  return (
-    <div className="bg-white border border-stone-200 rounded-lg overflow-hidden">
-      <table className="w-full">
-        <thead className="bg-stone-50 border-b border-stone-200">
-          <tr>
-            <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Користувач</th>
-            <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Бажана роль</th>
-            <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Призначена роль</th>
-            <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Статус</th>
-            <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Дії</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id} className="border-b border-stone-100 last:border-0">
-              <td className="px-4 py-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
-                <div className="text-sm text-stone-800">{u.name}</div>
-                <div className="text-xs text-stone-500">{u.email}</div>
-              </td>
-              <td className="px-4 py-3">
-                <span className="text-xs px-2 py-1 bg-stone-50 text-stone-600 rounded border border-stone-200">
-                  {ROLES[u.requestedRole]?.name || '—'}
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                <select value={u.assignedRole || ''} onChange={(e) => updateUser(u.id, { assignedRole: e.target.value || null })}
-                  className="text-sm border border-stone-200 rounded px-2 py-1 bg-white" style={{ fontFamily: 'system-ui, sans-serif' }}>
-                  <option value="">— без ролі —</option>
-                  {Object.entries(ROLES).map(([key, r]) => (
-                    <option key={key} value={key}>{r.name}</option>
-                  ))}
-                </select>
-              </td>
-              <td className="px-4 py-3">
-                {u.approved ? (
-                  <span className="text-xs px-2 py-1 bg-emerald-50 text-emerald-700 rounded border border-emerald-200">Підтверджений</span>
-                ) : (
-                  <span className="text-xs px-2 py-1 bg-amber-50 text-amber-700 rounded border border-amber-200">Очікує</span>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex gap-2">
-                  {!u.approved && (
-                    <button onClick={() => updateUser(u.id, { approved: true })} className="text-xs px-3 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600">
-                      Підтвердити
-                    </button>
-                  )}
-                  {u.approved && u.assignedRole !== 'admin' && (
-                    <button onClick={() => updateUser(u.id, { approved: false })} className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded hover:bg-stone-200">
-                      Заблокувати
-                    </button>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {users.length === 0 && <div className="p-8 text-center text-stone-400 italic">Користувачів ще немає</div>}
-    </div>
-  );
-}
-
-function TopicsTab({ topicsMap, reloadTopics }) {
-  const [selectedRole, setSelectedRole] = useState('florist');
-  const [newTopic, setNewTopic] = useState({ title: '', description: '' });
-  const [busy, setBusy] = useState(false);
-
-  const handleAdd = async () => {
-    if (!newTopic.title.trim()) return;
-    setBusy(true);
-    try {
-      await apiPost('/api/topics', {
-        id: `${selectedRole}-${Date.now()}`,
-        roleKey: selectedRole,
-        title: newTopic.title,
-        description: newTopic.description,
-      });
-      setNewTopic({ title: '', description: '' });
-      await reloadTopics();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    await apiDelete(`/api/topics/${id}`);
-    await reloadTopics();
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-white border border-stone-200 rounded-lg p-6">
-        <h3 className="text-lg text-stone-800 mb-4">Управління розділами знань</h3>
-        <div className="grid md:grid-cols-2 gap-3 mb-4">
-          <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}
-            className="px-3 py-2 border border-stone-200 rounded-md" style={{ fontFamily: 'system-ui, sans-serif' }}>
-            {Object.entries(ROLES).map(([key, r]) => (
-              <option key={key} value={key}>{r.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          {(topicsMap[selectedRole] || []).map((t) => (
-            <div key={t.id} className="flex items-center justify-between p-3 bg-stone-50 rounded">
-              <div>
-                <div className="text-sm text-stone-800">{t.title}</div>
-                <div className="text-xs text-stone-500 italic">{t.description}</div>
-              </div>
-              <button onClick={() => handleDelete(t.id)} className="text-rose-400 hover:text-rose-600">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-          {(topicsMap[selectedRole] || []).length === 0 && (
-            <p className="text-sm text-stone-400 italic">Для цієї ролі ще немає розділів.</p>
-          )}
-        </div>
-
-        <div className="mt-4 pt-4 border-t border-stone-100">
-          <p className="text-xs uppercase tracking-wider text-stone-500 mb-2">Додати новий розділ</p>
-          <div className="space-y-2">
-            <input type="text" value={newTopic.title} onChange={(e) => setNewTopic({ ...newTopic, title: e.target.value })}
-              placeholder="Назва розділу" className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }} />
-            <input type="text" value={newTopic.description} onChange={(e) => setNewTopic({ ...newTopic, description: e.target.value })}
-              placeholder="Опис" className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }} />
-            <button onClick={handleAdd} disabled={busy} className="px-4 py-2 bg-rose-500 disabled:opacity-60 text-white rounded text-sm hover:bg-rose-600">
-              <Plus className="w-4 h-4 inline mr-1" />Додати розділ
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ModerationTab({ articles }) {
-  const [pending, setPending] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    apiGet('/api/suggestions?status=pending').then(setPending).catch((e) => console.error(e)).finally(() => setLoading(false));
-  }, []);
-
-  const decide = async (id, status) => {
-    await apiPatch(`/api/suggestions/${id}`, { status });
-    setPending((prev) => prev.filter((s) => s.id !== id));
-  };
-
-  if (loading) return <div className="p-8 text-center text-stone-400 italic">Завантаження…</div>;
-
-  return (
-    <div className="bg-white border border-stone-200 rounded-lg p-6">
-      <h3 className="text-lg text-stone-800 mb-4">Пропозиції на модерацію ({pending.length})</h3>
-      {pending.length === 0 ? (
-        <p className="text-sm text-stone-400 italic">Усі пропозиції розглянуті</p>
-      ) : (
-        <div className="space-y-3">
-          {pending.map((s) => {
-            const article = articles.find((a) => a.id === s.articleId);
-            return (
-              <div key={s.id} className="p-4 bg-stone-50 rounded border border-stone-200">
-                <div className="text-xs text-stone-500 mb-1">До статті: <span className="text-stone-700">{article?.title || '—'}</span></div>
-                <div className="text-sm text-stone-700 mb-2" style={{ fontFamily: 'system-ui, sans-serif' }}>{s.content}</div>
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-stone-500">{s.authorName} · {ROLES[s.authorRole]?.name}</div>
-                  <div className="flex gap-2">
-                    <button onClick={() => decide(s.id, 'approved')} className="px-3 py-1 bg-emerald-500 text-white rounded text-xs">Прийняти</button>
-                    <button onClick={() => decide(s.id, 'rejected')} className="px-3 py-1 bg-stone-200 text-stone-700 rounded text-xs">Відхилити</button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============ АДМІН: ЛОКАЦІЇ ============
-function LocationsAdminTab({ allLocations, reloadLocations }) {
-  const [form, setForm] = useState({ name: '', color: '#e11d48', address: '' });
-  const [error, setError] = useState('');
-  const [openId, setOpenId] = useState(null);
-  const [workers, setWorkers] = useState([]);
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [users, setUsers] = useState([]);
-  const [assign, setAssign] = useState({ userId: '', isManager: false });
-
-  const openLocation = async (id) => {
-    setOpenId(id);
-    setWorkers(await apiGet(`/api/locations/${id}/users`));
-  };
-
-  const addLocation = async () => {
-    setError('');
-    if (!form.name.trim()) return setError('Вкажіть назву');
-    try {
-      await apiPost('/api/locations', form);
-      setForm({ name: '', color: '#e11d48', address: '' });
-      await reloadLocations();
-    } catch (e) { setError(e.message); }
-  };
-
-  const removeLocation = async (id) => {
-    setError('');
-    try {
-      await apiDelete(`/api/locations/${id}`);
-      if (openId === id) setOpenId(null);
-      await reloadLocations();
-    } catch (e) { setError(e.message); }
-  };
-
-  const detach = async (userId) => {
-    await apiDelete(`/api/admin/users/${userId}/locations/${openId}`);
-    await openLocation(openId);
-    await reloadLocations();
-  };
-
-  const openAssign = async () => {
-    setUsers(await apiGet('/api/admin/users'));
-    setAssign({ userId: '', isManager: false });
-    setAssignOpen(true);
-  };
-
-  const doAssign = async () => {
-    if (!assign.userId) return;
-    await apiPost(`/api/admin/users/${assign.userId}/locations`, { locationId: openId, isManager: assign.isManager });
-    setAssignOpen(false);
-    await openLocation(openId);
-    await reloadLocations();
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-white border border-stone-200 rounded-lg p-6">
-        <h3 className="text-lg text-stone-800 mb-4">Локації ({allLocations.length})</h3>
-        <div className="space-y-2">
-          {allLocations.map((l) => (
-            <div key={l.id} className="border border-stone-200 rounded">
-              <div className="flex items-center justify-between p-3">
-                <button onClick={() => (openId === l.id ? setOpenId(null) : openLocation(l.id))} className="flex items-center gap-2 text-left">
-                  <span className="w-3 h-3 rounded-full" style={{ background: l.color || '#a8a29e' }} />
-                  <span className="text-sm text-stone-800">{l.name}</span>
-                  <span className="text-xs text-stone-400">{l.userCount} людей</span>
-                </button>
-                <button onClick={() => removeLocation(l.id)} className="text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
-              </div>
-              {openId === l.id && (
-                <div className="border-t border-stone-100 p-3 bg-stone-50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs uppercase tracking-wider text-stone-500">Працівники</span>
-                    <button onClick={openAssign} className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1"><Plus className="w-3 h-3" />Призначити користувача</button>
-                  </div>
-                  {workers.length === 0 ? (
-                    <p className="text-sm text-stone-400 italic">Немає працівників</p>
-                  ) : workers.map((w) => (
-                    <div key={w.userLocationId} className="flex items-center justify-between py-1.5 text-sm">
-                      <span>{w.name}{w.surname ? ` ${w.surname}` : ''} {w.isManager && <span className="text-xs text-purple-600">· керівник</span>} {!w.approved && <span className="text-xs text-amber-600">· очікує</span>}</span>
-                      <button onClick={() => detach(w.userId)} className="text-xs text-stone-500 hover:text-rose-600">Зняти з локації</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-          {allLocations.length === 0 && <p className="text-sm text-stone-400 italic">Локацій ще немає</p>}
-        </div>
-      </div>
-
-      <div className="bg-white border border-stone-200 rounded-lg p-6">
-        <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-3">Додати локацію</h3>
-        <div className="grid sm:grid-cols-3 gap-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва" className="px-3 py-2 border border-stone-200 rounded-md text-sm" />
-          <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 w-full border border-stone-200 rounded-md" />
-          <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Адреса (необов.)" className="px-3 py-2 border border-stone-200 rounded-md text-sm" />
-        </div>
-        {error && <div className="mt-3 p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
-        <button onClick={addLocation} className="mt-3 px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded text-sm"><Plus className="w-4 h-4 inline mr-1" />Додати локацію</button>
-      </div>
-
-      {assignOpen && (
-        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg text-stone-800">Призначити користувача</h3>
-              <button onClick={() => setAssignOpen(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
-            </div>
-            <select value={assign.userId} onChange={(e) => setAssign({ ...assign, userId: e.target.value })}
-              className="w-full px-3 py-2 border border-stone-200 rounded-md mb-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
-              <option value="">— оберіть користувача —</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.name}{u.surname ? ` ${u.surname}` : ''} ({u.email})</option>)}
-            </select>
-            <label className="flex items-center gap-2 text-sm text-stone-600 mb-4">
-              <input type="checkbox" checked={assign.isManager} onChange={(e) => setAssign({ ...assign, isManager: e.target.checked })} />
-              Керівник локації
-            </label>
-            <button onClick={doAssign} disabled={!assign.userId} className="w-full px-4 py-2 bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">Призначити</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============ АДМІН: ЗАПИТИ ЛОКАЦІЙ ============
-function LocationRequestsTab({ reloadLocations }) {
-  const [reqs, setReqs] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    apiGet('/api/admin/location-requests?status=pending').then(setReqs).finally(() => setLoading(false));
-  }, []);
-
-  const decide = async (id, status) => {
-    await apiPatch(`/api/admin/location-requests/${id}`, { status });
-    setReqs((prev) => prev.filter((r) => r.id !== id));
-    if (status === 'approved') await reloadLocations();
-  };
-
-  if (loading) return <div className="p-8 text-center text-stone-400 italic">Завантаження…</div>;
-
-  return (
-    <div className="bg-white border border-stone-200 rounded-lg p-6">
-      <h3 className="text-lg text-stone-800 mb-4">Запити локацій ({reqs.length})</h3>
-      {reqs.length === 0 ? (
-        <p className="text-sm text-stone-400 italic">Немає запитів на розгляді</p>
-      ) : (
-        <div className="space-y-3">
-          {reqs.map((r) => (
-            <div key={r.id} className="p-4 bg-stone-50 rounded border border-stone-200 flex items-center justify-between">
-              <div className="text-sm">
-                <span className="text-stone-800">{r.userName}</span>
-                <span className="text-stone-400"> → </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: r.locationColor || '#a8a29e' }} />
-                  {r.locationName}
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => decide(r.id, 'approved')} className="px-3 py-1 bg-emerald-500 text-white rounded text-xs">Прийняти</button>
-                <button onClick={() => decide(r.id, 'rejected')} className="px-3 py-1 bg-stone-200 text-stone-700 rounded text-xs">Відхилити</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

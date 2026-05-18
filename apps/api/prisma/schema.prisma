@@ -17,6 +17,8 @@ model User {
   phone         String?
   rating        Int          @default(0)
   requestedRole String?
+  // DEPRECATED: тримається для зворотної сумісності (serialize.js, бейджі ролі).
+  // Авто-синхронізується до "первинної" ролі (admin або перша з roles).
   assignedRole  String?
   approved      Boolean      @default(false)
   createdAt     DateTime     @default(now())
@@ -26,6 +28,19 @@ model User {
   locations     UserLocation[]
   locationReqs  LocationRequest[]
   webauthn      WebAuthnCredential[]
+  roles         UserRole[]
+  suggestionRatings SuggestionRating[]
+  auditLogs     AuditLog[]
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
 }
 
 model Topic {
@@ -33,6 +48,7 @@ model Topic {
   roleKey     String
   title       String
   description String
+  icon        String?
   createdAt   DateTime  @default(now())
   articles    Article[]
 
@@ -80,8 +96,35 @@ model Suggestion {
   content   String
   status    String   @default("pending")
   createdAt DateTime @default(now())
+  ratings   SuggestionRating[]
 
   @@index([articleId])
+}
+
+model SuggestionRating {
+  id           String     @id @default(cuid())
+  suggestionId String
+  userId       String
+  rating       Int
+  createdAt    DateTime   @default(now())
+  suggestion   Suggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([suggestionId, userId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
 }
 
 model Location {

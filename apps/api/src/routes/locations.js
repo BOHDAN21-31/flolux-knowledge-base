@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth, requireAdmin } from '../auth.js';
-import { wrap, slugify, isAdmin } from '../lib.js';
+import { wrap, slugify, isAdmin, logAction } from '../lib.js';
 
 const router = Router();
 
@@ -35,6 +35,7 @@ router.post('/', requireAuth, requireAdmin, wrap(async (req, res) => {
   const location = await prisma.location.create({
     data: { name: String(name).trim(), slug: slugify(name), color: color || null, address: address || null },
   });
+  await logAction(req.user.id, 'location.created', 'location', location.id, { name: location.name });
   res.json(serializeLocation(location, 0));
 }));
 
@@ -48,6 +49,7 @@ router.patch('/:id', requireAuth, requireAdmin, wrap(async (req, res) => {
   if (req.body?.color !== undefined) data.color = req.body.color || null;
   if (req.body?.address !== undefined) data.address = req.body.address || null;
   const location = await prisma.location.update({ where: { id: req.params.id }, data });
+  await logAction(req.user.id, 'location.updated', 'location', location.id, data);
   res.json(serializeLocation(location));
 }));
 
@@ -58,6 +60,7 @@ router.delete('/:id', requireAuth, requireAdmin, wrap(async (req, res) => {
     return res.status(400).json({ error: 'Не можна видалити локацію з привʼязаними користувачами' });
   }
   await prisma.location.delete({ where: { id: req.params.id } });
+  await logAction(req.user.id, 'location.deleted', 'location', req.params.id);
   res.json({ ok: true });
 }));
 

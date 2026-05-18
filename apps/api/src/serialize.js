@@ -33,13 +33,21 @@ export const serializeComment = (c) => ({
   createdAt: ms(c.createdAt),
 });
 
-export const serializeSuggestion = (s) => ({
-  id: s.id,
-  articleId: s.articleId,
-  author: s.authorId,
-  authorName: s.author?.name || 'Користувач',
-  authorRole: s.author?.assignedRole || null,
-  content: s.content,
-  status: s.status,
-  createdAt: ms(s.createdAt),
-});
+export const serializeSuggestion = (s, userId = null) => {
+  const ratings = s.ratings || [];
+  const count = ratings.length;
+  const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
+  return {
+    id: s.id,
+    articleId: s.articleId,
+    author: s.authorId,
+    authorName: s.author?.name || 'Користувач',
+    authorRole: s.author?.assignedRole || null,
+    content: s.content,
+    status: s.status,
+    createdAt: ms(s.createdAt),
+    ratingAvg: count ? Math.round((sum / count) * 10) / 10 : 0,
+    ratingCount: count,
+    myRating: userId ? (ratings.find((r) => r.userId === userId)?.rating ?? null) : null,
+  };
+};

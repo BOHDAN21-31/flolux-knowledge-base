@@ -104,7 +104,7 @@ router.post('/login/verify', wrap(async (req, res) => {
 
   const cred = await prisma.webAuthnCredential.findUnique({ where: { credentialId: response.id } });
   if (!cred) return res.status(400).json({ error: 'Пристрій не зареєстровано' });
-  const user = await prisma.user.findUnique({ where: { id: cred.userId } });
+  const user = await prisma.user.findUnique({ where: { id: cred.userId }, include: { roles: true } });
   if (!user) return res.status(400).json({ error: 'Користувача не знайдено' });
 
   let verification;

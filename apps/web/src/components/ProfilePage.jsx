@@ -1,13 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { User, Lock, MapPin, Camera, Check, AlertCircle, Trash2, Fingerprint, Plus, Star, X } from 'lucide-react';
 import { apiPatch, apiPost, apiDelete, apiUpload, webauthnRegister, webauthnSupported } from '../api';
-
-const ROLE_NAMES = {
-  admin: 'Адміністратор', florist: 'Флорист', location_manager: 'Управляючий локації',
-  warehouse: 'Складський працівник', accountant: 'Бухгалтер', wholesale: 'Оптовий менеджер',
-  courier: "Кур'єр", logist: 'Логіст', barista: 'Бариста', driver: 'Водій вантажного авто',
-  tech: 'Технічна підтримка',
-};
+import { ROLES, roleName, userRoles } from '../roles';
 
 function Banner({ error, success }) {
   if (error) return <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded flex gap-2"><AlertCircle className="w-4 h-4 mt-0.5" />{error}</div>;
@@ -56,7 +50,8 @@ function PersonalSection({ user, allLocations, onRefresh }) {
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
 
-  const locCount = (locId) => allLocations.find((l) => l.id === locId)?.userCount ?? 0;
+  // userCount з бекенду включає мене -> для моїх локацій мінус я сам.
+  const locCount = (locId) => Math.max(0, (allLocations.find((l) => l.id === locId)?.userCount ?? 0) - 1);
 
   const save = async () => {
     setError(''); setSuccess(''); setBusy(true);
@@ -108,9 +103,24 @@ function PersonalSection({ user, allLocations, onRefresh }) {
           <div className="text-xs text-stone-500 mt-1">Статус акаунта</div>
         </div>
         <div className="bg-white border border-stone-200 rounded-lg p-4 text-center">
-          <div className="text-sm text-stone-800 mt-1">{ROLE_NAMES[user.assignedRole] || '—'}</div>
-          <div className="text-xs text-stone-500 mt-1">Призначена роль</div>
+          <div className="text-sm text-stone-800 mt-1">{userRoles(user).length || '—'}</div>
+          <div className="text-xs text-stone-500 mt-1">Ролей призначено</div>
         </div>
+      </div>
+
+      <div className="bg-white border border-stone-200 rounded-lg p-6">
+        <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-3">Мої ролі</h3>
+        {userRoles(user).length === 0 ? (
+          <p className="text-sm text-stone-400 italic">Ролі ще не призначені адміністратором</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {userRoles(user).map((r) => (
+              <span key={r} className={`px-3 py-1 rounded-full text-sm border ${ROLES[r]?.color || 'bg-stone-100 text-stone-700'}`}>
+                {roleName(r)}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="bg-white border border-stone-200 rounded-lg p-6 space-y-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
@@ -119,8 +129,8 @@ function PersonalSection({ user, allLocations, onRefresh }) {
           <Labeled label="Прізвище"><input value={form.surname} onChange={(e) => setForm({ ...form, surname: e.target.value })} className="inp" /></Labeled>
           <Labeled label="E-mail"><input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="inp" /></Labeled>
           <Labeled label="Телефон"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="inp" /></Labeled>
-          <Labeled label="Бажана роль (read-only)"><input value={ROLE_NAMES[user.requestedRole] || '—'} readOnly className="inp bg-stone-50 text-stone-500" /></Labeled>
-          <Labeled label="Призначена роль (read-only)"><input value={ROLE_NAMES[user.assignedRole] || '—'} readOnly className="inp bg-stone-50 text-stone-500" /></Labeled>
+          <Labeled label="Бажана роль (read-only)"><input value={user.requestedRole ? roleName(user.requestedRole) : '—'} readOnly className="inp bg-stone-50 text-stone-500" /></Labeled>
+          <Labeled label="Ролі (read-only)"><input value={userRoles(user).map(roleName).join(', ') || '—'} readOnly className="inp bg-stone-50 text-stone-500" /></Labeled>
         </div>
         <Banner error={error} success={success} />
         <button onClick={save} disabled={busy} className="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 disabled:opacity-60 text-white rounded-md text-sm">
@@ -259,6 +269,15 @@ function LocationsSection({ user, allLocations, onRefresh }) {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
+  const detach = async (l) => {
+    if (!window.confirm(`Відкріпитись від локації «${l.name}»? Ви впевнені?`)) return;
+    setError('');
+    try {
+      await apiDelete(`/api/users/me/locations/${l.locationId}`);
+      await onRefresh();
+    } catch (e) { setError(e.message); }
+  };
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="bg-white border border-stone-200 rounded-lg p-6">
@@ -273,8 +292,11 @@ function LocationsSection({ user, allLocations, onRefresh }) {
         ) : (
           <div className="flex flex-wrap gap-2">
             {approved.map((l) => (
-              <span key={l.locationId} className="px-3 py-1 rounded-full text-sm text-white" style={{ background: l.color || '#a8a29e' }}>
+              <span key={l.locationId} className="pl-3 pr-2 py-1 rounded-full text-sm text-white flex items-center gap-1.5" style={{ background: l.color || '#a8a29e' }}>
                 {l.name}{l.isManager ? ' · керівник' : ''}
+                <button onClick={() => detach(l)} title="Відкріпитись" className="hover:bg-white/25 rounded-full p-0.5">
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </span>
             ))}
           </div>

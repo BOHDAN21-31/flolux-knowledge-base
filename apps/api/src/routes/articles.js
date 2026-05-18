@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { serializeArticle, serializeComment, serializeSuggestion } from '../serialize.js';
-import { wrap, isAdmin } from '../lib.js';
+import { wrap, isAdmin, logAction } from '../lib.js';
 
 const router = Router();
 
@@ -56,7 +56,7 @@ router.get('/:id', requireAuth, wrap(async (req, res) => {
     include: {
       ...articleInclude,
       comments: { include: { author: true }, orderBy: { createdAt: 'asc' } },
-      suggestions: { include: { author: true }, orderBy: { createdAt: 'asc' } },
+      suggestions: { include: { author: true, ratings: true }, orderBy: { createdAt: 'desc' } },
     },
   });
   if (!article) return res.status(404).json({ error: 'Статтю не знайдено' });
@@ -68,10 +68,15 @@ router.get('/:id', requireAuth, wrap(async (req, res) => {
     if (!visible) return res.status(403).json({ error: 'Стаття недоступна для ваших локацій' });
   }
 
+  // Сортування пропозицій: за рейтингом desc -> за датою desc
+  const suggestions = article.suggestions
+    .map((s) => serializeSuggestion(s, req.user.id))
+    .sort((a, b) => b.ratingAvg - a.ratingAvg || b.createdAt - a.createdAt);
+
   res.json({
     ...serializeArticle(article),
     comments: article.comments.map(serializeComment),
-    suggestions: article.suggestions.map(serializeSuggestion),
+    suggestions,
   });
 }));
 
@@ -142,6 +147,9 @@ router.delete('/:id', requireAuth, wrap(async (req, res) => {
     return res.status(403).json({ error: 'Немає прав на видалення' });
   }
   await prisma.article.delete({ where: { id: req.params.id } });
+  if (isAdmin(req.user)) {
+    await logAction(req.user.id, 'article.deleted', 'article', req.params.id, { title: existing.title });
+  }
   res.json({ ok: true });
 }));
 
