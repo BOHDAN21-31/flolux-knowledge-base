@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { publicUser, requireAuth, requireAdmin } from '../auth.js';
 import { ROLE_KEYS } from '../constants.js';
-import { wrap, logAction, syncPrimaryRole } from '../lib.js';
+import { wrap, logAction, syncPrimaryRole, slugify } from '../lib.js';
+import { serializeLocation } from './locations.js';
 
 const router = Router();
 
@@ -328,6 +329,54 @@ router.delete('/users/:id/locations/:locationId', wrap(async (req, res) => {
     where: { userId: req.params.id, locationId: req.params.locationId },
   });
   await logAction(req.user.id, 'user.location_detached', 'user', req.params.id, { locationId: req.params.locationId });
+  res.json({ ok: true });
+}));
+
+// ===== Локації (admin CRUD) =====
+
+// POST /api/admin/locations { name, city, address, color }
+router.post('/locations', wrap(async (req, res) => {
+  const { name, city, address, color } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Вкажіть назву локації' });
+  const exists = await prisma.location.findUnique({ where: { name: String(name).trim() } });
+  if (exists) return res.status(400).json({ error: 'Локація з такою назвою вже існує' });
+  const location = await prisma.location.create({
+    data: {
+      name: String(name).trim(),
+      slug: slugify(name),
+      city: city || null,
+      address: address || null,
+      color: color || null,
+    },
+  });
+  await logAction(req.user.id, 'location.created', 'location', location.id, { name: location.name });
+  res.json(serializeLocation(location, 0));
+}));
+
+// PATCH /api/admin/locations/:id { name, city, address, color, active }
+router.patch('/locations/:id', wrap(async (req, res) => {
+  const data = {};
+  if (req.body?.name !== undefined) {
+    data.name = String(req.body.name).trim();
+    data.slug = slugify(req.body.name);
+  }
+  if (req.body?.city !== undefined) data.city = req.body.city || null;
+  if (req.body?.address !== undefined) data.address = req.body.address || null;
+  if (req.body?.color !== undefined) data.color = req.body.color || null;
+  if (req.body?.active !== undefined) data.active = !!req.body.active;
+  const location = await prisma.location.update({ where: { id: req.params.id }, data });
+  await logAction(req.user.id, 'location.updated', 'location', location.id, data);
+  res.json(serializeLocation(location));
+}));
+
+// DELETE /api/admin/locations/:id — лише якщо немає привʼязаних користувачів
+router.delete('/locations/:id', wrap(async (req, res) => {
+  const linked = await prisma.userLocation.count({ where: { locationId: req.params.id } });
+  if (linked > 0) {
+    return res.status(400).json({ error: 'Не можна видалити локацію з привʼязаними користувачами' });
+  }
+  await prisma.location.delete({ where: { id: req.params.id } });
+  await logAction(req.user.id, 'location.deleted', 'location', req.params.id);
   res.json({ ok: true });
 }));
 

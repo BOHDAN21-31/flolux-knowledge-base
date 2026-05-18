@@ -406,25 +406,45 @@ function UserDetailModal({ id, onClose }) {
 }
 
 // ============ ЛОКАЦІЇ ============
+const PRESET_CITIES = ['Київ', 'Львів', 'Івано-Франківськ', 'Рівне'];
+
 function LocationsTab({ allLocations, reloadLocations }) {
-  const [form, setForm] = useState({ name: '', color: '#e11d48', address: '' });
   const [error, setError] = useState('');
   const [openId, setOpenId] = useState(null);
   const [workers, setWorkers] = useState([]);
   const [assignOpen, setAssignOpen] = useState(false);
   const [users, setUsers] = useState([]);
   const [assign, setAssign] = useState({ userId: '', isManager: false });
+  const [addOpen, setAddOpen] = useState(false);
+  const [form, setForm] = useState({ name: '', cityPreset: 'Київ', cityOther: '', color: '#e11d48', address: '' });
+
+  const grouped = allLocations.reduce((acc, l) => {
+    const c = l.city || 'Інше';
+    (acc[c] = acc[c] || []).push(l);
+    return acc;
+  }, {});
 
   const openLocation = async (lid) => { setOpenId(lid); setWorkers(await apiGet(`/api/locations/${lid}/users`)); };
   const addLocation = async () => {
     setError('');
     if (!form.name.trim()) return setError('Вкажіть назву');
-    try { await apiPost('/api/locations', form); setForm({ name: '', color: '#e11d48', address: '' }); await reloadLocations(); }
+    const city = form.cityPreset === 'other' ? form.cityOther.trim() : form.cityPreset;
+    try {
+      await apiPost('/api/admin/locations', { name: form.name, city: city || null, address: form.address || null, color: form.color });
+      setForm({ name: '', cityPreset: 'Київ', cityOther: '', color: '#e11d48', address: '' });
+      setAddOpen(false);
+      await reloadLocations();
+    } catch (e) { setError(e.message); }
+  };
+  const toggleActive = async (l) => {
+    setError('');
+    try { await apiPatch(`/api/admin/locations/${l.id}`, { active: l.active === false }); await reloadLocations(); }
     catch (e) { setError(e.message); }
   };
   const removeLocation = async (lid) => {
     setError('');
-    try { await apiDelete(`/api/locations/${lid}`); if (openId === lid) setOpenId(null); await reloadLocations(); }
+    if (!window.confirm('Видалити локацію?')) return;
+    try { await apiDelete(`/api/admin/locations/${lid}`); if (openId === lid) setOpenId(null); await reloadLocations(); }
     catch (e) { setError(e.message); }
   };
   const detach = async (userId) => { await apiDelete(`/api/admin/users/${userId}/locations/${openId}`); await openLocation(openId); await reloadLocations(); };
@@ -437,50 +457,86 @@ function LocationsTab({ allLocations, reloadLocations }) {
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <h3 className="text-lg text-stone-800 mb-4">Локації ({allLocations.length})</h3>
-        <div className="space-y-2">
-          {allLocations.map((l) => (
-            <div key={l.id} className="border border-stone-200 rounded">
-              <div className="flex items-center justify-between p-3">
-                <button onClick={() => (openId === l.id ? setOpenId(null) : openLocation(l.id))} className="flex items-center gap-2 text-left">
-                  <span className="w-3 h-3 rounded-full" style={{ background: l.color || '#a8a29e' }} />
-                  <span className="text-sm text-stone-800">{l.name}</span>
-                  <span className="text-xs text-stone-400">{l.userCount} людей</span>
-                  <ChevronRight className={`w-4 h-4 text-stone-300 transition ${openId === l.id ? 'rotate-90' : ''}`} />
-                </button>
-                <button onClick={() => removeLocation(l.id)} className="text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
-              </div>
-              {openId === l.id && (
-                <div className="border-t border-stone-100 p-3 bg-stone-50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs uppercase tracking-wider text-stone-500">Працівники</span>
-                    <button onClick={openAssign} className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1"><Plus className="w-3 h-3" />Призначити користувача</button>
-                  </div>
-                  {workers.length === 0 ? <p className="text-sm text-stone-400 italic">Немає працівників</p> : workers.map((w) => (
-                    <div key={w.userLocationId} className="flex items-center justify-between py-1.5 text-sm">
-                      <span>{w.name}{w.surname ? ` ${w.surname}` : ''} {w.isManager && <span className="text-xs text-purple-600">· керівник</span>} {!w.approved && <span className="text-xs text-amber-600">· очікує</span>}</span>
-                      <button onClick={() => detach(w.userId)} className="text-xs text-stone-500 hover:text-rose-600">Зняти з локації</button>
+      <Card className="p-5 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg text-stone-800">Локації ({allLocations.length})</h3>
+          <button onClick={() => setAddOpen(true)} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+            <Plus className="w-4 h-4" /> Додати
+          </button>
+        </div>
+        {error && <div className="mb-3 p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
+        {allLocations.length === 0 && <p className="text-sm text-stone-400 italic">Локацій ще немає</p>}
+        <div className="space-y-5">
+          {Object.entries(grouped).map(([city, locs]) => (
+            <div key={city}>
+              <div className="text-xs uppercase tracking-wider text-stone-400 mb-2">{city}</div>
+              <div className="space-y-2">
+                {locs.map((l) => (
+                  <div key={l.id} className={`border rounded ${l.active === false ? 'border-stone-200 bg-stone-50 opacity-70' : 'border-stone-200'}`}>
+                    <div className="flex items-center justify-between p-3 gap-2">
+                      <button onClick={() => (openId === l.id ? setOpenId(null) : openLocation(l.id))} className="flex items-center gap-2 text-left min-w-0">
+                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: l.color || '#a8a29e' }} />
+                        <span className="text-sm text-stone-800 truncate">{l.name}</span>
+                        <span className="text-xs text-stone-400 flex-shrink-0">{l.userCount} люд.</span>
+                        <ChevronRight className={`w-4 h-4 text-stone-300 transition flex-shrink-0 ${openId === l.id ? 'rotate-90' : ''}`} />
+                      </button>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button onClick={() => toggleActive(l)} title={l.active === false ? 'Активувати' : 'Деактивувати'}
+                          className={`px-2 min-h-[36px] rounded text-xs border ${l.active === false ? 'border-stone-300 text-stone-500' : 'border-emerald-300 text-emerald-700 bg-emerald-50'}`}>
+                          {l.active === false ? 'Неактивна' : 'Активна'}
+                        </button>
+                        <button onClick={() => removeLocation(l.id)} className="w-9 h-9 flex items-center justify-center text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                    {openId === l.id && (
+                      <div className="border-t border-stone-100 p-3 bg-stone-50">
+                        {l.address && <div className="text-xs text-stone-500 mb-2">{l.address}</div>}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs uppercase tracking-wider text-stone-500">Працівники</span>
+                          <button onClick={openAssign} className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1"><Plus className="w-3 h-3" />Призначити</button>
+                        </div>
+                        {workers.length === 0 ? <p className="text-sm text-stone-400 italic">Немає працівників</p> : workers.map((w) => (
+                          <div key={w.userLocationId} className="flex items-center justify-between py-1.5 text-sm">
+                            <span>{w.name}{w.surname ? ` ${w.surname}` : ''} {w.isManager && <span className="text-xs text-purple-600">· керівник</span>} {!w.approved && <span className="text-xs text-amber-600">· очікує</span>}</span>
+                            <button onClick={() => detach(w.userId)} className="text-xs text-stone-500 hover:text-rose-600">Зняти</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
-          {allLocations.length === 0 && <p className="text-sm text-stone-400 italic">Локацій ще немає</p>}
         </div>
       </Card>
 
-      <Card className="p-6">
-        <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-3">Додати локацію</h3>
-        <div className="grid sm:grid-cols-3 gap-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва" className="px-3 py-2 border border-stone-200 rounded-md text-sm" />
-          <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 w-full border border-stone-200 rounded-md" />
-          <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Адреса (необов.)" className="px-3 py-2 border border-stone-200 rounded-md text-sm" />
+      {addOpen && (
+        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-lg w-full sm:max-w-md p-5 sm:p-6" style={{ fontFamily: 'system-ui, sans-serif' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg text-stone-800" style={{ fontFamily: 'Georgia, serif' }}>Додати локацію</h3>
+              <button onClick={() => setAddOpen(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-3">
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва" className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
+              <select value={form.cityPreset} onChange={(e) => setForm({ ...form, cityPreset: e.target.value })} className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm">
+                {PRESET_CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                <option value="other">Інше місто…</option>
+              </select>
+              {form.cityPreset === 'other' && (
+                <input value={form.cityOther} onChange={(e) => setForm({ ...form, cityOther: e.target.value })} placeholder="Назва міста" className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
+              )}
+              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Адреса (необов.)" className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
+              <label className="flex items-center gap-3 text-sm text-stone-600">
+                Колір <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 w-16 border border-stone-200 rounded-md" />
+              </label>
+              {error && <div className="p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
+              <button onClick={addLocation} className="w-full px-4 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">Додати локацію</button>
+            </div>
+          </div>
         </div>
-        {error && <div className="mt-3 p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
-        <button onClick={addLocation} className="mt-3 px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded text-sm"><Plus className="w-4 h-4 inline mr-1" />Додати локацію</button>
-      </Card>
+      )}
 
       {assignOpen && (
         <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-end sm:items-center justify-center sm:p-4">

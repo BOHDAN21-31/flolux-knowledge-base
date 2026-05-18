@@ -14,12 +14,22 @@ import { putChallenge, takeChallenge } from '../challengeStore.js';
 
 const router = Router();
 
-const RP_ID = process.env.RP_ID || 'localhost';
-const RP_NAME = process.env.RP_NAME || 'Flolux';
-const ORIGIN = process.env.ORIGIN || 'http://localhost:5173';
+const RP_ID = process.env.RP_ID;
+const RP_NAME = process.env.RP_NAME;
+const ORIGIN = process.env.ORIGIN;
+
+// WebAuthn вимагає явної конфігурації середовища (без тихого дефолта на localhost).
+// Повертає false і вже відповів 500, якщо чогось бракує.
+function assertWebauthnEnv(res) {
+  if (!ORIGIN) { res.status(500).json({ error: 'ORIGIN env not configured' }); return false; }
+  if (!RP_ID) { res.status(500).json({ error: 'RP_ID env not configured' }); return false; }
+  if (!RP_NAME) { res.status(500).json({ error: 'RP_NAME env not configured' }); return false; }
+  return true;
+}
 
 // POST /api/auth/webauthn/register/options — потрібен JWT
 router.post('/register/options', requireAuth, wrap(async (req, res) => {
+  if (!assertWebauthnEnv(res)) return;
   const creds = await prisma.webAuthnCredential.findMany({ where: { userId: req.user.id } });
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
@@ -37,6 +47,7 @@ router.post('/register/options', requireAuth, wrap(async (req, res) => {
 
 // POST /api/auth/webauthn/register/verify { response, deviceName }
 router.post('/register/verify', requireAuth, wrap(async (req, res) => {
+  if (!assertWebauthnEnv(res)) return;
   const { response, deviceName } = req.body || {};
   const expectedChallenge = takeChallenge(`reg:${req.user.id}`);
   if (!expectedChallenge) return res.status(400).json({ error: 'Челендж протермінований, спробуйте ще раз' });
@@ -73,6 +84,7 @@ router.post('/register/verify', requireAuth, wrap(async (req, res) => {
 // POST /api/auth/webauthn/login/options { email }
 // Не розкриває, чи існує користувач: завжди повертає валідні options.
 router.post('/login/options', wrap(async (req, res) => {
+  if (!assertWebauthnEnv(res)) return;
   const email = String(req.body?.email || '').toLowerCase().trim();
   let allowCredentials = [];
   if (email) {
@@ -95,6 +107,7 @@ router.post('/login/options', wrap(async (req, res) => {
 
 // POST /api/auth/webauthn/login/verify { email, response }
 router.post('/login/verify', wrap(async (req, res) => {
+  if (!assertWebauthnEnv(res)) return;
   const email = String(req.body?.email || '').toLowerCase().trim();
   const { response } = req.body || {};
   const expectedChallenge = takeChallenge(`login:${email}`);

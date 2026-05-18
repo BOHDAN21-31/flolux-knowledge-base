@@ -132,7 +132,9 @@ model Location {
   name      String            @unique
   slug      String            @unique
   color     String?
+  city      String?
   address   String?
+  active    Boolean           @default(true)
   createdAt DateTime          @default(now())
   users     UserLocation[]
   requests  LocationRequest[]

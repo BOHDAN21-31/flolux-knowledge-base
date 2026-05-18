@@ -39,8 +39,15 @@ app.use('/api/upload', uploadRoutes);
 // Невідомий /api маршрут -> 404 JSON (щоб не повертати SPA)
 app.use('/api', (req, res) => res.status(404).json({ error: 'Не знайдено' }));
 
-// Завантажені файли (Railway Volume або ./uploads)
-app.use('/uploads', express.static(UPLOAD_DIR));
+// Завантажені файли (Railway Volume або ./uploads).
+// Явні Content-Type для відео — інакше Safari/Chrome можуть не програвати.
+app.use('/uploads', express.static(UPLOAD_DIR, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.mp4')) res.setHeader('Content-Type', 'video/mp4');
+    if (filePath.endsWith('.mov')) res.setHeader('Content-Type', 'video/quicktime');
+    if (filePath.endsWith('.webm')) res.setHeader('Content-Type', 'video/webm');
+  },
+}));
 
 // Статика фронтенду + SPA fallback
 if (fs.existsSync(PUBLIC_DIR)) {

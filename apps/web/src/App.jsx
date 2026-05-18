@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, Menu, ChevronDown } from 'lucide-react';
+import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
 import AdminPanel from './components/AdminPanel';
@@ -31,10 +31,13 @@ export default function FloluxKB() {
   const [dataLoaded, setDataLoaded] = useState(false);
 
   const [authMode, setAuthMode] = useState('login');
-  const [view, setView] = useState('home');
-  const [activeTopic, setActiveTopic] = useState(null);
-  const [activeArticle, setActiveArticle] = useState(null);
-  const [showCreateArticle, setShowCreateArticle] = useState(false);
+
+  // ── Навігаційний стек (Задача 5): надійний back без білого екрана ──
+  const [stack, setStack] = useState([{ type: 'home' }]);
+  const current = stack[stack.length - 1];
+  const push = (frame) => setStack((s) => [...s, frame]);
+  const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : [{ type: 'home' }]));
+  const reset = (frame) => setStack([frame]);
 
   const refreshMe = async () => {
     const me = await apiGet('/api/users/me');
@@ -55,9 +58,7 @@ export default function FloluxKB() {
   useEffect(() => {
     const onUnauthorized = () => {
       setCurrentUser(null);
-      setView('home');
-      setActiveTopic(null);
-      setActiveArticle(null);
+      setStack([{ type: 'home' }]);
     };
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
@@ -95,14 +96,12 @@ export default function FloluxKB() {
   const handleLogout = () => {
     clearToken();
     setCurrentUser(null);
-    setView('home');
-    setActiveTopic(null);
-    setActiveArticle(null);
+    setStack([{ type: 'home' }]);
   };
 
   const onAuthSuccess = async () => {
     await refreshMe().catch(() => {});
-    setView('home');
+    setStack([{ type: 'home' }]);
   };
 
   if (!authChecked) return <Splash text="Завантаження..." />;
@@ -115,96 +114,126 @@ export default function FloluxKB() {
 
   const isAdmin = isAdminUser(currentUser);
 
+  const allTopics = Object.values(topicsMap).flat();
+  const topicById = (id) => allTopics.find((t) => t.id === id) || null;
+  const articleById = (id) => articles.find((a) => a.id === id) || null;
+
+  // Тип фрейму -> підсвітка в навігації (home/tech/admin/profile або null)
+  const navView = ['home', 'tech', 'admin', 'profile'].includes(current.type) ? current.type : null;
+
+  let screen = null;
+  if (current.type === 'home') {
+    screen = (
+      <HomeView
+        user={currentUser}
+        topics={topicsMap}
+        articles={articles}
+        allLocations={allLocations}
+        isAdmin={isAdmin}
+        onTopicClick={(t) => push({ type: 'topic', topicId: t.id })}
+        onGoProfile={() => reset({ type: 'profile' })}
+      />
+    );
+  } else if (current.type === 'profile') {
+    screen = <ProfilePage user={currentUser} allLocations={allLocations} onRefresh={refreshMe} />;
+  } else if (current.type === 'tech') {
+    screen = (
+      <TechView
+        topics={topicsMap.tech || []}
+        articles={articles.filter((a) => a.section === 'tech')}
+        onTopicClick={(t) => push({ type: 'topic', topicId: t.id })}
+      />
+    );
+  } else if (current.type === 'admin' && isAdmin) {
+    screen = (
+      <AdminPanel
+        topicsMap={topicsMap}
+        reloadTopics={reloadTopics}
+        articles={articles}
+        allLocations={allLocations}
+        reloadLocations={reloadLocations}
+        reloadArticles={reloadArticles}
+      />
+    );
+  } else if (current.type === 'topic') {
+    const topic = topicById(current.topicId);
+    screen = topic ? (
+      <TopicView
+        topic={topic}
+        articles={articles.filter((a) => a.topicId === topic.id)}
+        onBack={back}
+        onArticleClick={(a) => push({ type: 'article', articleId: a.id })}
+        onCreate={() => push({ type: 'createArticle', topicId: topic.id })}
+      />
+    ) : <NotFound onBack={back} />;
+  } else if (current.type === 'article') {
+    const article = articleById(current.articleId);
+    screen = article ? (
+      <ArticleView
+        article={article}
+        user={currentUser}
+        isAdmin={isAdmin}
+        onBack={back}
+        onEdit={() => push({ type: 'editArticle', articleId: article.id })}
+        onArticleUpdated={reloadArticles}
+      />
+    ) : <NotFound onBack={back} />;
+  } else if (current.type === 'createArticle') {
+    const topic = topicById(current.topicId);
+    screen = topic ? (
+      <ArticleForm
+        mode="create"
+        topic={topic}
+        allLocations={allLocations}
+        onClose={back}
+        onSaved={async () => { await reloadArticles(); back(); }}
+      />
+    ) : <NotFound onBack={back} />;
+  } else if (current.type === 'editArticle') {
+    const article = articleById(current.articleId);
+    screen = article ? (
+      <ArticleForm
+        mode="edit"
+        article={article}
+        allLocations={allLocations}
+        onClose={back}
+        onSaved={async () => { await reloadArticles(); back(); }}
+      />
+    ) : <NotFound onBack={back} />;
+  } else {
+    screen = <NotFound onBack={() => reset({ type: 'home' })} />;
+  }
+
   return (
     <div className="min-h-screen bg-stone-50" style={{ fontFamily: 'Georgia, "Playfair Display", serif' }}>
       <Header
         user={currentUser}
         onLogout={handleLogout}
-        onNavigate={(v) => { setView(v); setActiveTopic(null); setActiveArticle(null); }}
-        onProfile={() => { setView('profile'); setActiveTopic(null); setActiveArticle(null); }}
-        view={view}
+        onNavigate={(v) => reset({ type: v })}
+        onProfile={() => reset({ type: 'profile' })}
+        view={navView}
         isAdmin={isAdmin}
       />
 
       <main className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8 pb-24 md:pb-8">
-        {view === 'home' && !activeTopic && !activeArticle && (
-          <HomeView
-            user={currentUser}
-            topics={topicsMap}
-            articles={articles}
-            allLocations={allLocations}
-            isAdmin={isAdmin}
-            onTopicClick={(t) => { setActiveTopic(t); setView('topic'); }}
-            onGoProfile={() => setView('profile')}
-          />
-        )}
-
-        {view === 'profile' && (
-          <ProfilePage
-            user={currentUser}
-            allLocations={allLocations}
-            onRefresh={refreshMe}
-          />
-        )}
-
-        {view === 'tech' && !activeTopic && !activeArticle && (
-          <TechView
-            topics={topicsMap.tech || []}
-            articles={articles.filter((a) => a.section === 'tech')}
-            onTopicClick={(t) => { setActiveTopic(t); }}
-          />
-        )}
-
-        {view === 'admin' && isAdmin && (
-          <AdminPanel
-            topicsMap={topicsMap}
-            reloadTopics={reloadTopics}
-            articles={articles}
-            allLocations={allLocations}
-            reloadLocations={reloadLocations}
-            reloadArticles={reloadArticles}
-          />
-        )}
-
-        {activeTopic && !activeArticle && (
-          <TopicView
-            topic={activeTopic}
-            articles={articles.filter((a) => a.topicId === activeTopic.id)}
-            onBack={() => { setActiveTopic(null); }}
-            onArticleClick={(a) => setActiveArticle(a)}
-            onCreate={() => setShowCreateArticle(true)}
-          />
-        )}
-
-        {activeArticle && (
-          <ArticleView
-            article={activeArticle}
-            user={currentUser}
-            isAdmin={isAdmin}
-            onBack={() => setActiveArticle(null)}
-            onArticleUpdated={async (updated) => {
-              setActiveArticle(updated);
-              await reloadArticles();
-            }}
-          />
-        )}
-
-        {showCreateArticle && activeTopic && (
-          <CreateArticleModal
-            topic={activeTopic}
-            allLocations={allLocations}
-            onClose={() => setShowCreateArticle(false)}
-            onCreated={async () => { await reloadArticles(); setShowCreateArticle(false); }}
-          />
-        )}
+        {screen}
       </main>
 
       <MobileBottomNav
-        view={view}
+        view={navView}
         isAdmin={isAdmin}
-        onNavigate={(v) => { setView(v); setActiveTopic(null); setActiveArticle(null); }}
-        onProfile={() => { setView('profile'); setActiveTopic(null); setActiveArticle(null); }}
+        onNavigate={(v) => reset({ type: v })}
+        onProfile={() => reset({ type: 'profile' })}
       />
+    </div>
+  );
+}
+
+function NotFound({ onBack }) {
+  return (
+    <div className="text-center py-16">
+      <p className="text-stone-500 italic mb-4">Сторінку не знайдено або вона більше недоступна.</p>
+      <button onClick={onBack} className="px-4 min-h-[44px] bg-rose-500 text-white rounded-md text-sm">Повернутися</button>
     </div>
   );
 }
@@ -436,8 +465,6 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
   const roleLabel = primary
     ? `${ROLES[primary]?.name || 'Без ролі'}${roles.length > 1 ? ` +${roles.length - 1}` : ''}`
     : 'Без ролі';
-  const [sheet, setSheet] = useState(false);
-  const go = (fn) => { setSheet(false); fn(); };
 
   return (
     <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-stone-200">
@@ -453,6 +480,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
             </div>
           </button>
 
+          {/* Desktop nav (на мобільному дублює bottom-nav — приховано) */}
           <nav className="hidden md:flex items-center gap-1">
             <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{isAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</NavBtn>
             <NavBtn active={view === 'tech'} onClick={() => onNavigate('tech')} icon={Wrench}>Технічка</NavBtn>
@@ -460,7 +488,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
           </nav>
         </div>
 
-        {/* Desktop: профіль + вихід */}
+        {/* Desktop: ім'я + аватар + вихід */}
         <div className="hidden md:flex items-center gap-3">
           <button onClick={onProfile} className="text-right group" title="Мій профіль">
             <div className="text-sm text-stone-700 group-hover:text-rose-600 transition" style={{ fontFamily: 'system-ui, sans-serif' }}>
@@ -474,45 +502,16 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
           </button>
         </div>
 
-        {/* Mobile: бургер */}
-        <button onClick={() => setSheet(true)} className="md:hidden w-11 h-11 flex items-center justify-center text-stone-600" aria-label="Меню">
-          <Menu className="w-6 h-6" />
-        </button>
-      </div>
-
-      {/* Mobile sheet (висувне меню справа) */}
-      {sheet && (
-        <div className="md:hidden fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-stone-900/50" onClick={() => setSheet(false)} />
-          <div className="absolute right-0 top-0 h-full w-72 max-w-[85vw] bg-white shadow-xl flex flex-col animate-[slidein_.2s_ease-out]"
-            style={{ fontFamily: 'Georgia, serif' }}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200">
-              <span className="text-lg tracking-widest text-stone-800">FLOLUX</span>
-              <button onClick={() => setSheet(false)} className="w-11 h-11 flex items-center justify-center text-stone-500" aria-label="Закрити">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <button onClick={() => go(onProfile)} className="flex items-center gap-3 px-5 py-4 border-b border-stone-100 hover:bg-stone-50 text-left">
-              <HeaderAvatar user={user} primary={primary} size="w-11 h-11" />
-              <div style={{ fontFamily: 'system-ui, sans-serif' }}>
-                <div className="text-sm text-stone-800">{user.name}{user.surname ? ` ${user.surname}` : ''}</div>
-                <div className="text-xs text-stone-500">{roleLabel}</div>
-              </div>
-            </button>
-            <nav className="flex-1 p-3 space-y-1">
-              <SheetItem icon={BookOpen} active={view === 'home'} onClick={() => go(() => onNavigate('home'))}>{isAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</SheetItem>
-              <SheetItem icon={Wrench} active={view === 'tech'} onClick={() => go(() => onNavigate('tech'))}>Технічка</SheetItem>
-              {isAdmin && <SheetItem icon={Shield} active={view === 'admin'} onClick={() => go(() => onNavigate('admin'))}>Адмін</SheetItem>}
-              <SheetItem icon={User} active={view === 'profile'} onClick={() => go(onProfile)}>Профіль</SheetItem>
-            </nav>
-            <button onClick={() => go(onLogout)}
-              className="m-3 flex items-center justify-center gap-2 min-h-[44px] rounded-md border border-stone-200 text-stone-600 hover:text-rose-600 hover:border-rose-300 transition text-sm">
-              <LogOut className="w-4 h-4" /> Вийти
-            </button>
-          </div>
-          <style>{`@keyframes slidein{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+        {/* Mobile: лише аватар (→профіль) + вихід; навігація в bottom-nav */}
+        <div className="md:hidden flex items-center gap-1">
+          <button onClick={onProfile} className="w-11 h-11 flex items-center justify-center" title="Мій профіль">
+            <HeaderAvatar user={user} primary={primary} size="w-9 h-9" />
+          </button>
+          <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-rose-500 transition" aria-label="Вийти">
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
-      )}
+      </div>
     </header>
   );
 }
@@ -523,15 +522,6 @@ function NavBtn({ active, onClick, icon: Icon, children }) {
       className={`flex items-center gap-2 px-4 min-h-[44px] rounded-md text-sm transition ${active ? 'bg-stone-100 text-stone-800' : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'}`}>
       <Icon className="w-4 h-4" />
       {children}
-    </button>
-  );
-}
-
-function SheetItem({ active, onClick, icon: Icon, children }) {
-  return (
-    <button onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 min-h-[48px] rounded-md text-sm transition ${active ? 'bg-rose-50 text-rose-700' : 'text-stone-600 hover:bg-stone-50'}`}>
-      <Icon className="w-5 h-5" /> {children}
     </button>
   );
 }
@@ -815,7 +805,7 @@ function TopicView({ topic, articles, onBack, onArticleClick, onCreate }) {
 }
 
 // ============ СТАТТЯ ============
-function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
+function ArticleView({ article, user, isAdmin, onBack, onEdit }) {
   const [comments, setComments] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [commentText, setCommentText] = useState('');
@@ -823,8 +813,6 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
   const [showSuggest, setShowSuggest] = useState(false);
   const [openSug, setOpenSug] = useState(false);
   const [openCom, setOpenCom] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [editForm, setEditForm] = useState({ title: article.title, content: article.content });
 
   const canEdit = isAdmin || article.author === user.id;
 
@@ -856,12 +844,6 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
     setShowSuggest(false);
   };
 
-  const handleSaveEdit = async () => {
-    const updated = await apiPatch(`/api/articles/${article.id}`, editForm);
-    setEditMode(false);
-    await onArticleUpdated(updated);
-  };
-
   const setSuggStatus = async (sugg, status) => {
     const updated = await apiPatch(`/api/suggestions/${sugg.id}`, { status });
     setSuggestions((prev) => prev.map((s) => (s.id === sugg.id ? updated : s)));
@@ -882,23 +864,11 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
       </button>
 
       <article className="bg-white border border-stone-200 rounded-lg p-5 md:p-8 mb-6">
-        {editMode ? (
-          <div className="space-y-4">
-            <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-              className="w-full text-2xl md:text-3xl border-b-2 border-stone-200 focus:border-rose-400 focus:outline-none pb-2" style={{ fontFamily: 'Georgia, serif' }} />
-            <textarea value={editForm.content} onChange={(e) => setEditForm({ ...editForm, content: e.target.value })} rows={15}
-              className="w-full p-3 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} />
-            <div className="flex gap-2">
-              <button onClick={handleSaveEdit} className="px-4 py-2 bg-emerald-500 text-white rounded text-sm">Зберегти</button>
-              <button onClick={() => setEditMode(false)} className="px-4 py-2 bg-stone-100 text-stone-700 rounded text-sm">Скасувати</button>
-            </div>
-          </div>
-        ) : (
-          <>
+        <>
             <div className="flex items-start justify-between gap-3 mb-4">
               <h1 className="text-2xl md:text-3xl text-stone-800">{article.title}</h1>
               {canEdit && (
-                <button onClick={() => { setEditForm({ title: article.title, content: article.content }); setEditMode(true); }} className="w-11 h-11 flex items-center justify-center flex-shrink-0 text-stone-400 hover:text-rose-500 transition">
+                <button onClick={onEdit} className="w-11 h-11 flex items-center justify-center flex-shrink-0 text-stone-400 hover:text-rose-500 transition" title="Редагувати">
                   <Edit3 className="w-5 h-5" />
                 </button>
               )}
@@ -945,13 +915,12 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
                 {article.mediaUrls.map((url) => (
                   /\.(mp4|mov|webm)$/i.test(url)
-                    ? <video key={url} src={url} controls className="w-full rounded-lg border border-stone-200" />
+                    ? <video key={url} src={url} controls playsInline preload="metadata" className="w-full rounded-lg border border-stone-200" />
                     : <img key={url} src={url} alt="" className="w-full rounded-lg border border-stone-200 object-cover" />
                 ))}
               </div>
             )}
           </>
-        )}
       </article>
 
       {/* Пропозиції правок */}
@@ -1074,17 +1043,38 @@ function renderMarkdown(text) {
   });
 }
 
-// ============ СТВОРЕННЯ СТАТТІ ============
-function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
-  const [form, setForm] = useState({ title: '', content: '', tags: '' });
-  const [locationIds, setLocationIds] = useState([]);
-  const [mediaUrls, setMediaUrls] = useState([]);
+// ============ ФОРМА СТАТТІ (створення + редагування) ============
+const mediaType = (url) => (/\.(mp4|mov|webm)$/i.test(url) ? 'video' : 'image');
+
+function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved }) {
+  const isEdit = mode === 'edit';
+  const [form, setForm] = useState({
+    title: article?.title || '',
+    content: article?.content || '',
+    tags: isEdit ? (article?.tags || []).join(', ') : '',
+  });
+  const [locationIds, setLocationIds] = useState(
+    isEdit ? (article?.locations || []).map((l) => l.locationId) : []
+  );
+  const [mediaUrls, setMediaUrls] = useState(
+    isEdit ? (article?.mediaUrls || []).map((url) => ({ url, type: mediaType(url) })) : []
+  );
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [cityFilter, setCityFilter] = useState('all');
+  const [locSearch, setLocSearch] = useState('');
   const mediaRef = useRef(null);
 
   const toggleLoc = (id) => setLocationIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const cities = [...new Set(allLocations.map((l) => l.city).filter(Boolean))];
+  const visibleLocs = allLocations.filter((l) => {
+    if (l.active === false && !locationIds.includes(l.id)) return false;
+    if (cityFilter !== 'all' && (l.city || '—') !== cityFilter) return false;
+    if (locSearch && !`${l.name} ${l.address || ''}`.toLowerCase().includes(locSearch.toLowerCase())) return false;
+    return true;
+  });
 
   const onPickMedia = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -1110,16 +1100,23 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
     }
     setBusy(true);
     try {
-      await apiPost('/api/articles', {
-        topicId: topic.id,
-        section: topic.id.startsWith('tc-') ? 'tech' : 'role',
+      const payload = {
         title: form.title,
         content: form.content,
         tags: form.tags,
         locationIds,
         mediaUrls: mediaUrls.map((m) => m.url),
-      });
-      await onCreated();
+      };
+      if (isEdit) {
+        await apiPatch(`/api/articles/${article.id}`, payload);
+      } else {
+        await apiPost('/api/articles', {
+          ...payload,
+          topicId: topic.id,
+          section: topic.id.startsWith('tc-') ? 'tech' : 'role',
+        });
+      }
+      await onSaved();
     } catch (e) {
       setError(e.message);
       setBusy(false);
@@ -1131,8 +1128,8 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
       <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
         <div className="p-4 md:p-6 border-b border-stone-200 flex items-center justify-between sticky top-0 bg-white z-10">
           <div>
-            <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">Нова стаття в розділі</p>
-            <h2 className="text-lg md:text-xl text-stone-800">{topic.title}</h2>
+            <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">{isEdit ? 'Редагування статті' : 'Нова стаття в розділі'}</p>
+            <h2 className="text-lg md:text-xl text-stone-800">{isEdit ? form.title || 'Без назви' : topic.title}</h2>
           </div>
           <button onClick={onClose} className="w-11 h-11 flex items-center justify-center flex-shrink-0 text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
         </div>
@@ -1141,7 +1138,7 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
           <div>
             <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Заголовок</label>
             <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full px-3 py-2 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} placeholder="Назва статті" />
+              className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} placeholder="Назва статті" />
           </div>
 
           <div>
@@ -1154,7 +1151,7 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
           <div>
             <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Теги (через кому)</label>
             <input type="text" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })}
-              className="w-full px-3 py-2 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }}
+              className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }}
               placeholder="наприклад: троянди, догляд, поради" />
           </div>
 
@@ -1162,26 +1159,44 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
             <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">
               Локації <span className="text-stone-400 normal-case">(порожньо = доступно всім за роллю)</span>
             </label>
-            <div className="flex flex-wrap gap-2">
-              {allLocations.map((l) => {
-                const on = locationIds.includes(l.id);
-                return (
-                  <button key={l.id} type="button" onClick={() => toggleLoc(l.id)}
-                    className={`px-3 py-1 rounded-full text-sm border transition ${on ? 'text-white border-transparent' : 'text-stone-600 border-stone-300 bg-white'}`}
-                    style={on ? { background: l.color || '#a8a29e' } : undefined}>
-                    {l.name}
-                  </button>
-                );
-              })}
-              {allLocations.length === 0 && <span className="text-sm text-stone-400 italic">Локацій ще немає</span>}
-            </div>
+            {allLocations.length === 0 ? (
+              <span className="text-sm text-stone-400 italic">Локацій ще немає</span>
+            ) : (
+              <>
+                <input type="text" value={locSearch} onChange={(e) => setLocSearch(e.target.value)} placeholder="Пошук локації…"
+                  className="w-full px-3 min-h-[44px] mb-2 border border-stone-200 rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }} />
+                {cities.length > 1 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {['all', ...cities].map((c) => (
+                      <button key={c} type="button" onClick={() => setCityFilter(c)}
+                        className={`px-3 py-1 rounded-full text-xs border transition ${cityFilter === c ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 border-stone-300'}`}>
+                        {c === 'all' ? 'Всі міста' : c}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {visibleLocs.map((l) => {
+                    const on = locationIds.includes(l.id);
+                    return (
+                      <button key={l.id} type="button" onClick={() => toggleLoc(l.id)}
+                        className={`px-3 min-h-[40px] rounded-full text-sm border transition ${on ? 'text-white border-transparent' : 'text-stone-600 border-stone-300 bg-white'}`}
+                        style={on ? { background: l.color || '#a8a29e' } : undefined}>
+                        {l.name}{l.city ? <span className="opacity-70"> · {l.city}</span> : ''}
+                      </button>
+                    );
+                  })}
+                  {visibleLocs.length === 0 && <span className="text-sm text-stone-400 italic">Нічого не знайдено</span>}
+                </div>
+              </>
+            )}
           </div>
 
           <div>
             <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Фото / відео</label>
             <input ref={mediaRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={onPickMedia} />
             <button type="button" onClick={() => mediaRef.current?.click()} disabled={uploading}
-              className="flex items-center gap-2 px-4 py-2 border border-stone-300 hover:border-rose-400 rounded-md text-sm text-stone-700 disabled:opacity-60">
+              className="flex items-center gap-2 px-4 min-h-[44px] border border-stone-300 hover:border-rose-400 rounded-md text-sm text-stone-700 disabled:opacity-60">
               <Plus className="w-4 h-4" /> {uploading ? 'Завантаження...' : 'Додати фото/відео'}
             </button>
             {mediaUrls.length > 0 && (
@@ -1189,10 +1204,10 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
                 {mediaUrls.map((m, i) => (
                   <div key={m.url} className="relative group">
                     {m.type === 'video'
-                      ? <video src={m.url} className="w-full h-24 object-cover rounded" />
+                      ? <video src={m.url} playsInline preload="metadata" className="w-full h-24 object-cover rounded" />
                       : <img src={m.url} alt="" className="w-full h-24 object-cover rounded" />}
                     <button type="button" onClick={() => setMediaUrls((prev) => prev.filter((_, j) => j !== i))}
-                      className="absolute top-1 right-1 bg-stone-900/70 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition">
+                      className="absolute top-1 right-1 bg-stone-900/70 text-white rounded-full w-7 h-7 flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 transition">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
@@ -1207,7 +1222,7 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
         <div className="p-4 md:p-6 border-t border-stone-200 flex gap-2 justify-end sticky bottom-0 bg-white">
           <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 text-stone-700 rounded-md text-sm">Скасувати</button>
           <button onClick={handleSave} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
-            {busy ? 'Збереження...' : 'Опублікувати'}
+            {busy ? 'Збереження...' : (isEdit ? 'Зберегти зміни' : 'Опублікувати')}
           </button>
         </div>
       </div>

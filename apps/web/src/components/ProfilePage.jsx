@@ -259,7 +259,9 @@ function SecuritySection({ user, onRefresh }) {
 
 function LocationsSection({ user, allLocations, onRefresh }) {
   const [showModal, setShowModal] = useState(false);
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [search, setSearch] = useState('');
+  const [cityFilter, setCityFilter] = useState('all');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -268,15 +270,29 @@ function LocationsSection({ user, allLocations, onRefresh }) {
     ...(user.locations || []).map((l) => l.locationId),
     ...(user.locationRequests || []).map((r) => r.locationId),
   ]);
-  const available = allLocations.filter((l) => !requestedIds.has(l.id));
+  const available = allLocations.filter((l) => l.active !== false && !requestedIds.has(l.id));
+  const cities = [...new Set(available.map((l) => l.city || 'Інше'))];
+  const filtered = available.filter((l) => {
+    if (cityFilter !== 'all' && (l.city || 'Інше') !== cityFilter) return false;
+    if (search && !`${l.name} ${l.address || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+  const grouped = filtered.reduce((acc, l) => {
+    const c = l.city || 'Інше';
+    (acc[c] = acc[c] || []).push(l);
+    return acc;
+  }, {});
+  const toggle = (id) => setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
-  const sendRequest = async () => {
-    if (!selected) return;
+  const sendRequests = async () => {
+    if (selected.length === 0) return;
     setError(''); setBusy(true);
     try {
-      await apiPost('/api/users/me/locations/request', { locationId: selected });
+      for (const id of selected) {
+        await apiPost('/api/users/me/locations/request', { locationId: id });
+      }
       await onRefresh();
-      setShowModal(false); setSelected('');
+      setShowModal(false); setSelected([]); setSearch(''); setCityFilter('all');
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
@@ -329,26 +345,60 @@ function LocationsSection({ user, allLocations, onRefresh }) {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
-          <div className="bg-white rounded-t-2xl sm:rounded-lg w-full sm:max-w-md p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[85vh] rounded-none sm:rounded-lg flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-200 sticky top-0 bg-white">
               <h3 className="text-lg text-stone-800">Запросити локацію</h3>
               <button onClick={() => setShowModal(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
             </div>
-            {available.length === 0 ? (
-              <p className="text-sm text-stone-400 italic">Немає доступних локацій для запиту</p>
-            ) : (
-              <>
-                <select value={selected} onChange={(e) => setSelected(e.target.value)}
-                  className="w-full px-3 py-2 border border-stone-200 rounded-md mb-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
-                  <option value="">— оберіть локацію —</option>
-                  {available.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              {available.length === 0 ? (
+                <p className="text-sm text-stone-400 italic">Немає доступних локацій для запиту</p>
+              ) : (
+                <>
+                  <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Пошук локації…"
+                    className="w-full px-3 min-h-[44px] mb-3 border border-stone-200 rounded-md text-sm" />
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {['all', ...cities].map((c) => (
+                      <button key={c} onClick={() => setCityFilter(c)}
+                        className={`px-3 py-1.5 rounded-full text-xs border transition ${cityFilter === c ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 border-stone-300'}`}>
+                        {c === 'all' ? 'Всі' : c}
+                      </button>
+                    ))}
+                  </div>
+                  {Object.keys(grouped).length === 0 ? (
+                    <p className="text-sm text-stone-400 italic">Нічого не знайдено</p>
+                  ) : Object.entries(grouped).map(([city, locs]) => (
+                    <div key={city} className="mb-4">
+                      <div className="text-xs uppercase tracking-wider text-stone-400 mb-2">{city}</div>
+                      <div className="space-y-1.5">
+                        {locs.map((l) => (
+                          <label key={l.id} className="flex items-start gap-3 p-2.5 rounded-md border border-stone-200 hover:border-rose-300 cursor-pointer">
+                            <input type="checkbox" className="mt-0.5 w-4 h-4" checked={selected.includes(l.id)} onChange={() => toggle(l.id)} />
+                            <span className="flex-1">
+                              <span className="flex items-center gap-2 text-sm text-stone-800">
+                                <span className="w-2.5 h-2.5 rounded-full" style={{ background: l.color || '#a8a29e' }} />{l.name}
+                              </span>
+                              {l.address && <span className="block text-xs text-stone-400 mt-0.5">{l.address}</span>}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {available.length > 0 && (
+              <div className="p-4 sm:p-5 border-t border-stone-200 sticky bottom-0 bg-white">
                 {error && <div className="p-2 mb-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
-                <button onClick={sendRequest} disabled={busy || !selected} className="w-full px-4 py-2 bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
-                  {busy ? 'Надсилання...' : 'Надіслати запит'}
+                <button onClick={sendRequests} disabled={busy || selected.length === 0}
+                  className="w-full px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
+                  {busy ? 'Надсилання...' : `Запросити вибрані${selected.length ? ` (${selected.length})` : ''}`}
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>

@@ -27,7 +27,16 @@ function runMigrateDeploy() {
   });
 }
 
+function warnWebauthnEnv() {
+  const missing = ['ORIGIN', 'RP_ID', 'RP_NAME'].filter((k) => !process.env[k]);
+  if (missing.length) {
+    console.warn(`[startup] УВАГА: не задано ${missing.join(', ')} — WebAuthn (Touch/Face ID) не працюватиме`);
+  }
+}
+
 async function main() {
+  warnWebauthnEnv();
+
   try {
     await prisma.$connect();
     console.log('[startup] підключено до БД');

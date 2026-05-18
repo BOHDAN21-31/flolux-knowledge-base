@@ -17,22 +17,27 @@ export async function seedTopics() {
 }
 
 const LOCATIONS = [
-  { name: 'КОНОВАЛЬЦЯ', slug: 'konovaltsya', color: '#e11d48' },
-  { name: 'РЕТРО', slug: 'retro', color: '#8b5cf6' },
-  { name: 'КТ', slug: 'kt', color: '#f59e0b' },
-  { name: 'ВЛ', slug: 'vl', color: '#10b981' },
-  { name: 'ПИМОНЕНКА', slug: 'pymonenka', color: '#0ea5e9' },
-  { name: 'ПОЗНЯКИ', slug: 'poznyaky', color: '#dc2626' },
-  { name: 'ОБОЛОНЬ', slug: 'obolon', color: '#3b82f6' },
-  { name: 'ФЕНСІ', slug: 'fensi', color: '#ec4899' },
-  { name: 'РІВНЕ', slug: 'rivne', color: '#14b8a6' },
-  { name: 'ВИННИЧЕНКА Львів', slug: 'vynnychenka-lviv', color: '#f97316' },
-  { name: 'АНТОНОВИЧА Львів', slug: 'antonovycha-lviv', color: '#84cc16' },
-  { name: 'ВОВЧИНЕЦЬКА Франик', slug: 'vovchynetska-franyk', color: '#06b6d4' },
-  { name: 'ЧОРНОВОЛА Франковськ', slug: 'chornovola-frankovsk', color: '#a855f7' },
-  { name: 'Стрийська Львів', slug: 'stryjska-lviv', color: '#22c55e' },
-  { name: 'Хмельницького Львів', slug: 'khmelnytskoho-lviv', color: '#eab308' },
-  { name: 'Бухгалтерія', slug: 'buhgalteriya', color: '#64748b' },
+  // Київ
+  { name: 'Бухгалтерія', slug: 'buhgalteriya', city: 'Київ', color: '#64748b' },
+  { name: 'ВЛ16', slug: 'vl16', city: 'Київ', address: 'вул. Володимиро-Либідьска 16', color: '#10b981' },
+  { name: 'Комфорт Таун', slug: 'komfort-taun', city: 'Київ', address: 'вул. Березнева 12', color: '#f59e0b' },
+  { name: 'Коновальця 32б', slug: 'konovaltsya-32b', city: 'Київ', address: 'вул. Євгена Коновальця 32Б', color: '#e11d48' },
+  { name: 'Лесі Українки', slug: 'lesi-ukrainky', city: 'Київ', address: 'бул. Лесі Українки, 12', color: '#0ea5e9' },
+  { name: 'Нова Англія', slug: 'nova-anglia', city: 'Київ', address: 'вул. Михайла Максимовича, 26', color: '#a855f7' },
+  { name: 'Оболонь', slug: 'obolon', city: 'Київ', color: '#3b82f6' },
+  { name: 'Пимоненко', slug: 'pymonenko', city: 'Київ', address: 'вул. Пимоненка, 13Ж', color: '#06b6d4' },
+  { name: 'Позняки', slug: 'poznyaky', city: 'Київ', address: 'пр-т. Бажана, 16Д', color: '#dc2626' },
+  { name: 'Ретро', slug: 'retro', city: 'Київ', address: 'просп. Європейського союзу, 53/46', color: '#8b5cf6' },
+  // Львів
+  { name: 'Антоновича', slug: 'antonovycha', city: 'Львів', address: 'вул. Антоновича 31Б', color: '#84cc16' },
+  { name: 'Винниченка', slug: 'vynnychenka', city: 'Львів', address: 'вул. Винниченка 3', color: '#f97316' },
+  { name: 'Хмельницього ЖК', slug: 'khmelnytskoho-zhk', city: 'Львів', address: 'вул. Богдана Хмельницького 207Г', color: '#eab308' },
+  // Івано-Франківськ
+  { name: 'Вовчинецька 227', slug: 'vovchynetska-227', city: 'Івано-Франківськ', address: 'вул. Вовчинецька 227', color: '#22c55e' },
+  { name: 'Хмельницького склад', slug: 'khmelnytskoho-sklad', city: 'Івано-Франківськ', address: 'вул. Хмельницького', color: '#14b8a6' },
+  { name: 'Чорновола 3', slug: 'chornovola-3', city: 'Івано-Франківськ', address: 'вул. Чорновола, 3', color: '#ec4899' },
+  // Рівне
+  { name: 'Захисників Маріуполя 89', slug: 'zakhysnykiv-mariupolya-89', city: 'Рівне', address: 'вул. Захисників Маріуполя 89', color: '#a855f7' },
 ];
 
 // Сід дефолтних локацій. Виконується лише якщо таблиця Location порожня.
