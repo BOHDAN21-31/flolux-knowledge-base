@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint } from 'lucide-react';
+import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, Menu, ChevronDown } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
 import AdminPanel from './components/AdminPanel';
@@ -126,7 +126,7 @@ export default function FloluxKB() {
         isAdmin={isAdmin}
       />
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8 pb-24 md:pb-8">
         {view === 'home' && !activeTopic && !activeArticle && (
           <HomeView
             user={currentUser}
@@ -198,6 +198,13 @@ export default function FloluxKB() {
           />
         )}
       </main>
+
+      <MobileBottomNav
+        view={view}
+        isAdmin={isAdmin}
+        onNavigate={(v) => { setView(v); setActiveTopic(null); setActiveArticle(null); }}
+        onProfile={() => { setView('profile'); setActiveTopic(null); setActiveArticle(null); }}
+      />
     </div>
   );
 }
@@ -298,27 +305,27 @@ function AuthScreen({ mode, setMode, onSuccess }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{
+    <div className="min-h-screen flex items-center justify-center px-6 py-8" style={{
       background: 'linear-gradient(135deg, #fdf2f8 0%, #fff7ed 50%, #f0fdf4 100%)',
       fontFamily: 'Georgia, "Playfair Display", serif'
     }}>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-white shadow-sm mb-4 border border-rose-200">
-            <Flower2 className="w-10 h-10 text-rose-500" strokeWidth={1.5} />
+          <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-white shadow-sm mb-4 border border-rose-200">
+            <Flower2 className="w-9 h-9 md:w-10 md:h-10 text-rose-500" strokeWidth={1.5} />
           </div>
-          <h1 className="text-4xl tracking-wide text-stone-800 mb-2" style={{ letterSpacing: '0.1em' }}>FLOLUX</h1>
+          <h1 className="text-3xl md:text-4xl tracking-wide text-stone-800 mb-2" style={{ letterSpacing: '0.1em' }}>FLOLUX</h1>
           <p className="text-stone-500 text-sm italic">База знань компанії</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-xl p-8 border border-stone-100">
+        <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 border border-stone-100">
           <div className="flex gap-1 mb-6 bg-stone-50 rounded-md p-1">
             <button onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
-              className={`flex-1 py-2 px-3 text-sm rounded transition ${mode === 'login' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>Вхід</button>
+              className={`flex-1 min-h-[44px] px-3 text-sm rounded transition ${mode === 'login' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>Вхід</button>
             <button onClick={() => { setMode('register'); setError(''); setSuccess(''); }}
-              className={`flex-1 py-2 px-3 text-sm rounded transition ${mode === 'register' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>Реєстрація</button>
+              className={`flex-1 min-h-[44px] px-3 text-sm rounded transition ${mode === 'register' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>Реєстрація</button>
             <button onClick={() => { setMode('reset'); setError(''); setSuccess(''); }}
-              className={`flex-1 py-2 px-3 text-sm rounded transition ${mode === 'reset' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>Відновити</button>
+              className={`flex-1 min-h-[44px] px-3 text-sm rounded transition ${mode === 'reset' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>Відновити</button>
           </div>
 
           {mode === 'login' && (
@@ -414,16 +421,27 @@ function Field({ icon: Icon, label, type, value, onChange, hint, rightIcon: Righ
 }
 
 // ============ HEADER ============
+function HeaderAvatar({ user, primary, size }) {
+  const RoleIcon = ROLES[primary]?.icon || User;
+  return (
+    <span className={`${size} rounded-full flex items-center justify-center overflow-hidden border ${ROLES[primary]?.color || 'bg-stone-100 text-stone-600'}`}>
+      {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : <RoleIcon className="w-4 h-4" />}
+    </span>
+  );
+}
+
 function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
   const roles = userRoles(user);
   const primary = isAdmin ? 'admin' : (user.role || roles[0] || null);
-  const RoleIcon = ROLES[primary]?.icon || User;
   const roleLabel = primary
     ? `${ROLES[primary]?.name || 'Без ролі'}${roles.length > 1 ? ` +${roles.length - 1}` : ''}`
     : 'Без ролі';
+  const [sheet, setSheet] = useState(false);
+  const go = (fn) => { setSheet(false); fn(); };
+
   return (
-    <header className="bg-white border-b border-stone-200 sticky top-0 z-30">
-      <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-stone-200">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <button onClick={() => onNavigate('home')} className="flex items-center gap-3 group">
             <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center border border-rose-200 group-hover:bg-rose-100 transition">
@@ -435,28 +453,66 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
             </div>
           </button>
 
-          <nav className="flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-1">
             <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{isAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</NavBtn>
             <NavBtn active={view === 'tech'} onClick={() => onNavigate('tech')} icon={Wrench}>Технічка</NavBtn>
             {isAdmin && <NavBtn active={view === 'admin'} onClick={() => onNavigate('admin')} icon={Shield}>Адмін</NavBtn>}
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Desktop: профіль + вихід */}
+        <div className="hidden md:flex items-center gap-3">
           <button onClick={onProfile} className="text-right group" title="Мій профіль">
             <div className="text-sm text-stone-700 group-hover:text-rose-600 transition" style={{ fontFamily: 'system-ui, sans-serif' }}>
               {user.name}{user.surname ? ` ${user.surname}` : ''}
             </div>
             <div className="text-xs text-stone-500">{roleLabel}</div>
           </button>
-          <button onClick={onProfile} className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden ${ROLES[primary]?.color || 'bg-stone-100 text-stone-600'} border`} title="Мій профіль">
-            {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : <RoleIcon className="w-4 h-4" />}
-          </button>
-          <button onClick={onLogout} className="p-2 text-stone-400 hover:text-rose-500 transition" title="Вийти">
+          <button onClick={onProfile} className="w-9 h-9" title="Мій профіль"><HeaderAvatar user={user} primary={primary} size="w-9 h-9" /></button>
+          <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-rose-500 transition" title="Вийти">
             <LogOut className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Mobile: бургер */}
+        <button onClick={() => setSheet(true)} className="md:hidden w-11 h-11 flex items-center justify-center text-stone-600" aria-label="Меню">
+          <Menu className="w-6 h-6" />
+        </button>
       </div>
+
+      {/* Mobile sheet (висувне меню справа) */}
+      {sheet && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-stone-900/50" onClick={() => setSheet(false)} />
+          <div className="absolute right-0 top-0 h-full w-72 max-w-[85vw] bg-white shadow-xl flex flex-col animate-[slidein_.2s_ease-out]"
+            style={{ fontFamily: 'Georgia, serif' }}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200">
+              <span className="text-lg tracking-widest text-stone-800">FLOLUX</span>
+              <button onClick={() => setSheet(false)} className="w-11 h-11 flex items-center justify-center text-stone-500" aria-label="Закрити">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <button onClick={() => go(onProfile)} className="flex items-center gap-3 px-5 py-4 border-b border-stone-100 hover:bg-stone-50 text-left">
+              <HeaderAvatar user={user} primary={primary} size="w-11 h-11" />
+              <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+                <div className="text-sm text-stone-800">{user.name}{user.surname ? ` ${user.surname}` : ''}</div>
+                <div className="text-xs text-stone-500">{roleLabel}</div>
+              </div>
+            </button>
+            <nav className="flex-1 p-3 space-y-1">
+              <SheetItem icon={BookOpen} active={view === 'home'} onClick={() => go(() => onNavigate('home'))}>{isAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</SheetItem>
+              <SheetItem icon={Wrench} active={view === 'tech'} onClick={() => go(() => onNavigate('tech'))}>Технічка</SheetItem>
+              {isAdmin && <SheetItem icon={Shield} active={view === 'admin'} onClick={() => go(() => onNavigate('admin'))}>Адмін</SheetItem>}
+              <SheetItem icon={User} active={view === 'profile'} onClick={() => go(onProfile)}>Профіль</SheetItem>
+            </nav>
+            <button onClick={() => go(onLogout)}
+              className="m-3 flex items-center justify-center gap-2 min-h-[44px] rounded-md border border-stone-200 text-stone-600 hover:text-rose-600 hover:border-rose-300 transition text-sm">
+              <LogOut className="w-4 h-4" /> Вийти
+            </button>
+          </div>
+          <style>{`@keyframes slidein{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+        </div>
+      )}
     </header>
   );
 }
@@ -464,10 +520,45 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
 function NavBtn({ active, onClick, icon: Icon, children }) {
   return (
     <button onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm transition ${active ? 'bg-stone-100 text-stone-800' : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'}`}>
+      className={`flex items-center gap-2 px-4 min-h-[44px] rounded-md text-sm transition ${active ? 'bg-stone-100 text-stone-800' : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'}`}>
       <Icon className="w-4 h-4" />
       {children}
     </button>
+  );
+}
+
+function SheetItem({ active, onClick, icon: Icon, children }) {
+  return (
+    <button onClick={onClick}
+      className={`w-full flex items-center gap-3 px-4 min-h-[48px] rounded-md text-sm transition ${active ? 'bg-rose-50 text-rose-700' : 'text-stone-600 hover:bg-stone-50'}`}>
+      <Icon className="w-5 h-5" /> {children}
+    </button>
+  );
+}
+
+// Нижня навігація для мобільного (основні розділи). Десктоп — прихована.
+function MobileBottomNav({ view, isAdmin, onNavigate, onProfile }) {
+  const items = [
+    { key: 'home', label: isAdmin ? 'Бібліотека' : 'Бібліотека', icon: BookOpen, onClick: () => onNavigate('home') },
+    { key: 'tech', label: 'Технічка', icon: Wrench, onClick: () => onNavigate('tech') },
+    { key: 'profile', label: 'Профіль', icon: User, onClick: onProfile },
+  ];
+  if (isAdmin) items.push({ key: 'admin', label: 'Адмін', icon: Shield, onClick: () => onNavigate('admin') });
+
+  return (
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-stone-200 flex"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      {items.map((it) => {
+        const active = view === it.key;
+        return (
+          <button key={it.key} onClick={it.onClick}
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-xs transition ${active ? 'text-rose-600' : 'text-stone-500'}`}>
+            <it.icon className="w-5 h-5" strokeWidth={active ? 2.2 : 1.7} />
+            <span style={{ fontFamily: 'system-ui, sans-serif' }}>{it.label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -506,23 +597,23 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
 
   return (
     <div>
-      <div className="mb-10 pb-6 border-b border-stone-200">
+      <div className="mb-8 md:mb-10 pb-6 border-b border-stone-200">
         <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">Вітаємо</p>
-        <h1 className="text-4xl text-stone-800 mb-2">{user.name}</h1>
+        <h1 className="text-3xl md:text-4xl text-stone-800 mb-2">{user.name}</h1>
         <p className="text-stone-500 italic">
           {isAdmin ? 'Уся бібліотека знань Flolux' : `Ваші ролі — ${roles.map(roleName).join(', ').toLowerCase()}`}
         </p>
       </div>
 
-      <div className="mb-12">
+      <div className="mb-10 md:mb-12">
         <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4 flex items-center gap-2"><MapPin className="w-3.5 h-3.5" /> Мої локації</h2>
         {approved.length === 0 ? (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-5 flex items-center justify-between">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <p className="text-sm text-amber-800 italic">У вас немає підтверджених локацій. Запросіть локацію у профілі.</p>
-            <button onClick={onGoProfile} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm whitespace-nowrap">Запросити локацію</button>
+            <button onClick={onGoProfile} className="px-4 min-h-[44px] bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm whitespace-nowrap w-full sm:w-auto">Запросити локацію</button>
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {approved.map((l) => (
               <div key={l.locationId} className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
                 <span className="flex items-center gap-2 text-stone-800">
@@ -557,13 +648,13 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
                 <span className={`px-2 py-0.5 rounded-full text-xs border ${ROLES[rk]?.color || 'bg-stone-100'}`}>{roleName(rk)}</span>
               </h3>
             )}
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {(topics[rk] || []).map((topic) => {
                 const count = articles.filter((a) => a.topicId === topic.id).length;
                 const Ico = iconFor(topic.icon);
                 return (
                   <button key={topic.id} onClick={() => onTopicClick(topic)}
-                    className="text-left bg-white border border-stone-200 rounded-lg p-6 hover:border-rose-300 hover:shadow-md transition group">
+                    className="text-left bg-white border border-stone-200 rounded-lg p-5 md:p-6 hover:border-rose-300 hover:shadow-md transition group">
                     <div className="flex items-start gap-4">
                       <div className="w-11 h-11 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0 group-hover:bg-rose-100 transition">
                         <Ico className="w-5 h-5 text-rose-500" />
@@ -628,14 +719,14 @@ function TechView({ topics, articles, onTopicClick }) {
         </p>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {topics.map((topic) => {
           const count = articles.filter((a) => a.topicId === topic.id).length;
           const iconMap = { 'tc-1': Printer, 'tc-2': Monitor, 'tc-3': Wifi, 'tc-4': Wifi, 'tc-5': Settings };
           const Icon = topic.icon ? iconFor(topic.icon, Wrench) : (iconMap[topic.id] || Wrench);
           return (
             <button key={topic.id} onClick={() => onTopicClick(topic)}
-              className="text-left bg-white border border-stone-200 rounded-lg p-6 hover:border-indigo-300 hover:shadow-md transition group">
+              className="text-left bg-white border border-stone-200 rounded-lg p-5 md:p-6 hover:border-indigo-300 hover:shadow-md transition group">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition">
                   <Icon className="w-6 h-6 text-indigo-500" />
@@ -649,7 +740,7 @@ function TechView({ topics, articles, onTopicClick }) {
             </button>
           );
         })}
-        {topics.length === 0 && <p className="text-stone-400 italic col-span-2">Технічних розділів ще немає.</p>}
+        {topics.length === 0 && <p className="text-stone-400 italic col-span-full">Технічних розділів ще немає.</p>}
       </div>
     </div>
   );
@@ -665,24 +756,24 @@ function TopicView({ topic, articles, onBack, onArticleClick, onCreate }) {
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800 mb-6 transition">
+      <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800 mb-4 min-h-[44px] transition">
         <ArrowLeft className="w-4 h-4" /> Повернутися
       </button>
 
-      <div className="mb-8 pb-6 border-b border-stone-200">
+      <div className="mb-6 md:mb-8 pb-6 border-b border-stone-200">
         <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">Розділ</p>
-        <h1 className="text-3xl text-stone-800 mb-2">{topic.title}</h1>
+        <h1 className="text-2xl md:text-3xl text-stone-800 mb-2">{topic.title}</h1>
         <p className="text-stone-500 italic">{topic.description}</p>
       </div>
 
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input type="text" placeholder="Пошук статей..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400 bg-white"
+            className="w-full pl-10 pr-4 min-h-[44px] py-2.5 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400 bg-white"
             style={{ fontFamily: 'system-ui, sans-serif' }} />
         </div>
-        <button onClick={onCreate} className="flex items-center gap-2 px-4 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-md transition text-sm">
+        <button onClick={onCreate} className="flex items-center justify-center gap-2 px-4 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md transition text-sm w-full sm:w-auto">
           <Plus className="w-4 h-4" /> Створити статтю
         </button>
       </div>
@@ -730,6 +821,8 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
   const [commentText, setCommentText] = useState('');
   const [suggestionText, setSuggestionText] = useState('');
   const [showSuggest, setShowSuggest] = useState(false);
+  const [openSug, setOpenSug] = useState(false);
+  const [openCom, setOpenCom] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState({ title: article.title, content: article.content });
 
@@ -784,15 +877,15 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800 mb-6 transition">
+      <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800 mb-4 min-h-[44px] transition">
         <ArrowLeft className="w-4 h-4" /> До розділу
       </button>
 
-      <article className="bg-white border border-stone-200 rounded-lg p-8 mb-6">
+      <article className="bg-white border border-stone-200 rounded-lg p-5 md:p-8 mb-6">
         {editMode ? (
           <div className="space-y-4">
             <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-              className="w-full text-3xl border-b-2 border-stone-200 focus:border-rose-400 focus:outline-none pb-2" style={{ fontFamily: 'Georgia, serif' }} />
+              className="w-full text-2xl md:text-3xl border-b-2 border-stone-200 focus:border-rose-400 focus:outline-none pb-2" style={{ fontFamily: 'Georgia, serif' }} />
             <textarea value={editForm.content} onChange={(e) => setEditForm({ ...editForm, content: e.target.value })} rows={15}
               className="w-full p-3 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} />
             <div className="flex gap-2">
@@ -802,10 +895,10 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
           </div>
         ) : (
           <>
-            <div className="flex items-start justify-between mb-4">
-              <h1 className="text-3xl text-stone-800">{article.title}</h1>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h1 className="text-2xl md:text-3xl text-stone-800">{article.title}</h1>
               {canEdit && (
-                <button onClick={() => { setEditForm({ title: article.title, content: article.content }); setEditMode(true); }} className="text-stone-400 hover:text-rose-500 transition">
+                <button onClick={() => { setEditForm({ title: article.title, content: article.content }); setEditMode(true); }} className="w-11 h-11 flex items-center justify-center flex-shrink-0 text-stone-400 hover:text-rose-500 transition">
                   <Edit3 className="w-5 h-5" />
                 </button>
               )}
@@ -844,12 +937,12 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
               </div>
             )}
 
-            <div className="prose max-w-none text-stone-700 leading-relaxed whitespace-pre-wrap" style={{ fontFamily: 'system-ui, sans-serif', fontSize: '15px', lineHeight: '1.75' }}>
+            <div className="prose max-w-none text-stone-700 whitespace-pre-wrap break-words" style={{ fontFamily: 'system-ui, sans-serif', fontSize: '16px', lineHeight: '1.7' }}>
               {renderMarkdown(article.content)}
             </div>
 
             {article.mediaUrls && article.mediaUrls.length > 0 && (
-              <div className="grid sm:grid-cols-2 gap-3 mt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
                 {article.mediaUrls.map((url) => (
                   /\.(mp4|mov|webm)$/i.test(url)
                     ? <video key={url} src={url} controls className="w-full rounded-lg border border-stone-200" />
@@ -862,25 +955,27 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
       </article>
 
       {/* Пропозиції правок */}
-      <div className="bg-white border border-stone-200 rounded-lg p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg text-stone-800 flex items-center gap-2">
+      <div className="bg-white border border-stone-200 rounded-lg p-5 md:p-6 mb-6">
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <button onClick={() => setOpenSug((v) => !v)} className="flex items-center gap-2 text-lg text-stone-800 md:cursor-default">
             <Star className="w-4 h-4 text-amber-500" />
             Пропозиції покращень <span className="text-stone-400 text-sm">({suggestions.length})</span>
-          </h3>
-          <button onClick={() => setShowSuggest(!showSuggest)} className="text-sm text-rose-500 hover:text-rose-600 flex items-center gap-1">
-            <Plus className="w-4 h-4" /> Запропонувати правку
+            <ChevronDown className={`w-4 h-4 text-stone-400 md:hidden transition ${openSug ? 'rotate-180' : ''}`} />
+          </button>
+          <button onClick={() => { setShowSuggest(!showSuggest); setOpenSug(true); }} className="text-sm text-rose-500 hover:text-rose-600 flex items-center gap-1 min-h-[44px]">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Запропонувати правку</span><span className="sm:hidden">Правка</span>
           </button>
         </div>
 
+        <div className={`${openSug ? '' : 'hidden '}md:block`}>
         {showSuggest && (
           <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded">
             <textarea value={suggestionText} onChange={(e) => setSuggestionText(e.target.value)}
               placeholder="Опишіть пропозицію щодо покращення статті..." rows={3}
               className="w-full p-3 border border-amber-200 rounded text-sm focus:outline-none focus:border-amber-400" style={{ fontFamily: 'system-ui, sans-serif' }} />
             <div className="flex gap-2 mt-2">
-              <button onClick={handleSuggestion} className="px-4 py-1.5 bg-amber-500 text-white rounded text-sm">Надіслати</button>
-              <button onClick={() => setShowSuggest(false)} className="px-4 py-1.5 bg-stone-100 text-stone-700 rounded text-sm">Скасувати</button>
+              <button onClick={handleSuggestion} className="px-4 min-h-[44px] bg-amber-500 text-white rounded text-sm">Надіслати</button>
+              <button onClick={() => setShowSuggest(false)} className="px-4 min-h-[44px] bg-stone-100 text-stone-700 rounded text-sm">Скасувати</button>
             </div>
           </div>
         )}
@@ -901,8 +996,8 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
                     {s.status === 'rejected' && <span className="text-xs px-2 py-0.5 bg-rose-100 text-rose-700 rounded">Відхилено</span>}
                     {s.status === 'pending' && isAdmin && (
                       <>
-                        <button onClick={() => setSuggStatus(s, 'approved')} className="text-emerald-600 hover:text-emerald-700"><Check className="w-4 h-4" /></button>
-                        <button onClick={() => setSuggStatus(s, 'rejected')} className="text-rose-500 hover:text-rose-600"><X className="w-4 h-4" /></button>
+                        <button onClick={() => setSuggStatus(s, 'approved')} className="w-10 h-10 flex items-center justify-center text-emerald-600 hover:text-emerald-700"><Check className="w-4 h-4" /></button>
+                        <button onClick={() => setSuggStatus(s, 'rejected')} className="w-10 h-10 flex items-center justify-center text-rose-500 hover:text-rose-600"><X className="w-4 h-4" /></button>
                       </>
                     )}
                   </div>
@@ -913,15 +1008,20 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {/* Коментарі */}
-      <div className="bg-white border border-stone-200 rounded-lg p-6">
-        <h3 className="text-lg text-stone-800 flex items-center gap-2 mb-4">
-          <MessageSquare className="w-4 h-4 text-stone-500" />
-          Обговорення <span className="text-stone-400 text-sm">({comments.length})</span>
-        </h3>
+      <div className="bg-white border border-stone-200 rounded-lg p-5 md:p-6">
+        <button onClick={() => setOpenCom((v) => !v)} className="w-full flex items-center justify-between gap-2 mb-4 md:cursor-default">
+          <span className="text-lg text-stone-800 flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-stone-500" />
+            Обговорення <span className="text-stone-400 text-sm">({comments.length})</span>
+          </span>
+          <ChevronDown className={`w-4 h-4 text-stone-400 md:hidden transition ${openCom ? 'rotate-180' : ''}`} />
+        </button>
 
+        <div className={`${openCom ? '' : 'hidden '}md:block`}>
         <div className="space-y-3 mb-4">
           {comments.length === 0 ? (
             <p className="text-sm text-stone-400 italic">Поки що немає коментарів</p>
@@ -947,10 +1047,11 @@ function ArticleView({ article, user, isAdmin, onBack, onArticleUpdated }) {
         <div className="flex gap-2">
           <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleComment()} placeholder="Написати коментар..."
-            className="flex-1 px-4 py-2 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} />
-          <button onClick={handleComment} className="px-4 py-2 bg-stone-800 hover:bg-stone-900 text-white rounded-md transition">
+            className="flex-1 px-4 min-h-[44px] border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} />
+          <button onClick={handleComment} className="w-12 min-h-[44px] flex items-center justify-center bg-stone-800 hover:bg-stone-900 text-white rounded-md transition flex-shrink-0">
             <Send className="w-4 h-4" />
           </button>
+        </div>
         </div>
       </div>
     </div>
@@ -1026,17 +1127,17 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-stone-200 flex items-center justify-between">
+    <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch md:items-center justify-center md:p-4">
+      <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
+        <div className="p-4 md:p-6 border-b border-stone-200 flex items-center justify-between sticky top-0 bg-white z-10">
           <div>
             <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">Нова стаття в розділі</p>
-            <h2 className="text-xl text-stone-800">{topic.title}</h2>
+            <h2 className="text-lg md:text-xl text-stone-800">{topic.title}</h2>
           </div>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="w-11 h-11 flex items-center justify-center flex-shrink-0 text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1">
           <div>
             <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Заголовок</label>
             <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -1103,9 +1204,9 @@ function CreateArticleModal({ topic, allLocations = [], onClose, onCreated }) {
           {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
         </div>
 
-        <div className="p-6 border-t border-stone-200 flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 bg-stone-100 text-stone-700 rounded-md text-sm">Скасувати</button>
-          <button onClick={handleSave} disabled={busy} className="px-4 py-2 bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
+        <div className="p-4 md:p-6 border-t border-stone-200 flex gap-2 justify-end sticky bottom-0 bg-white">
+          <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 text-stone-700 rounded-md text-sm">Скасувати</button>
+          <button onClick={handleSave} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
             {busy ? 'Збереження...' : 'Опублікувати'}
           </button>
         </div>

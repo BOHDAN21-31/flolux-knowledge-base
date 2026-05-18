@@ -19,23 +19,34 @@ export default function ProfilePage({ user, allLocations, onRefresh }) {
 
   return (
     <div>
-      <div className="mb-8 pb-6 border-b border-stone-200">
+      <div className="mb-6 md:mb-8 pb-6 border-b border-stone-200">
         <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">Профіль</p>
-        <h1 className="text-3xl text-stone-800">{user.name}{user.surname ? ` ${user.surname}` : ''}</h1>
+        <h1 className="text-2xl md:text-3xl text-stone-800">{user.name}{user.surname ? ` ${user.surname}` : ''}</h1>
       </div>
 
-      <div className="flex gap-1 mb-6 bg-stone-100 rounded-md p-1 w-fit flex-wrap">
+      {/* Mobile: таб-навігація (одна секція за раз) */}
+      <div className="md:hidden flex gap-1 mb-6 bg-stone-100 rounded-md p-1 overflow-x-auto scroll-touch">
         {tabs.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded text-sm transition ${tab === t.key ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500 hover:text-stone-700'}`}>
+            className={`px-3 min-h-[44px] rounded text-sm whitespace-nowrap flex-shrink-0 transition ${tab === t.key ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {tab === 'personal' && <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} />}
-      {tab === 'security' && <SecuritySection user={user} onRefresh={onRefresh} />}
-      {tab === 'locations' && <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />}
+      {/* Mobile: лише активна секція */}
+      <div className="md:hidden">
+        {tab === 'personal' && <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} />}
+        {tab === 'security' && <SecuritySection user={user} onRefresh={onRefresh} />}
+        {tab === 'locations' && <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />}
+      </div>
+
+      {/* Desktop: усі три секції на сторінці */}
+      <div className="hidden md:block space-y-12">
+        <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} />
+        <SecuritySection user={user} onRefresh={onRefresh} />
+        <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />
+      </div>
     </div>
   );
 }
@@ -318,11 +329,11 @@ function LocationsSection({ user, allLocations, onRefresh }) {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-lg w-full sm:max-w-md p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg text-stone-800">Запросити локацію</h3>
-              <button onClick={() => setShowModal(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowModal(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
             </div>
             {available.length === 0 ? (
               <p className="text-sm text-stone-400 italic">Немає доступних локацій для запиту</p>

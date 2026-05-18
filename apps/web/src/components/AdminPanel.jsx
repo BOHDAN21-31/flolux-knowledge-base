@@ -26,18 +26,30 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
 
   return (
     <div>
-      <div className="mb-8 pb-6 border-b border-stone-200 flex items-center gap-3">
+      <div className="mb-6 md:mb-8 pb-6 border-b border-stone-200 flex items-center gap-3">
         <div className="w-12 h-12 rounded-lg bg-rose-50 flex items-center justify-center border border-rose-200">
           <Shield className="w-6 h-6 text-rose-500" />
         </div>
         <div>
           <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">Управління системою</p>
-          <h1 className="text-3xl text-stone-800">Адмін-панель</h1>
+          <h1 className="text-2xl md:text-3xl text-stone-800">Адмін-панель</h1>
         </div>
       </div>
 
-      <div className="flex gap-6 items-start">
-        <aside className="w-56 flex-shrink-0 sticky top-24">
+      {/* Mobile: горизонтальний скрол-таб (sticky) */}
+      <div className="md:hidden -mx-4 px-4 mb-4 sticky top-[60px] z-20 bg-stone-50/95 backdrop-blur">
+        <div className="flex gap-2 overflow-x-auto scroll-touch py-2" style={{ scrollSnapType: 'x proximity' }}>
+          {NAV.map((n) => (
+            <button key={n.key} onClick={() => setTab(n.key)} style={{ scrollSnapAlign: 'start' }}
+              className={`flex items-center gap-2 px-3 min-h-[44px] rounded-md text-sm whitespace-nowrap flex-shrink-0 transition ${tab === n.key ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'text-stone-600 bg-white border border-stone-200'}`}>
+              <n.icon className="w-4 h-4" />{n.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex md:gap-6 md:items-start">
+        <aside className="hidden md:block w-56 flex-shrink-0 sticky top-24">
           <nav className="space-y-1">
             {NAV.map((n) => (
               <button key={n.key} onClick={() => setTab(n.key)}
@@ -138,9 +150,9 @@ function Dashboard({ onJump }) {
         ) : (
           <div className="space-y-2">
             {s.recentAudit.map((a) => (
-              <div key={a.id} className="flex items-center justify-between text-sm border-b border-stone-100 last:border-0 pb-2 last:pb-0">
-                <span className="text-stone-700"><b className="text-stone-900">{a.actorName}</b> · <code className="text-xs text-rose-600">{a.action}</code> · {a.targetType}</span>
-                <span className="text-xs text-stone-400">{fmtDate(a.createdAt)}</span>
+              <div key={a.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 text-sm border-b border-stone-100 last:border-0 pb-2 last:pb-0">
+                <span className="text-stone-700 break-words"><b className="text-stone-900">{a.actorName}</b> · <code className="text-xs text-rose-600">{a.action}</code> · {a.targetType}</span>
+                <span className="text-xs text-stone-400 flex-shrink-0">{fmtDate(a.createdAt)}</span>
               </div>
             ))}
           </div>
@@ -269,7 +281,8 @@ function UsersTab({ allLocations }) {
         </div>
       )}
 
-      <Card className="overflow-hidden">
+      {/* Desktop: таблиця */}
+      <Card className="overflow-hidden hidden md:block">
         <table className="w-full">
           <thead className="bg-stone-50 border-b border-stone-200">
             <tr>
@@ -299,7 +312,7 @@ function UsersTab({ allLocations }) {
                   <div className="flex gap-2">
                     {!u.approved && <button onClick={() => setApproved(u.id, true)} className="text-xs px-3 py-1 bg-emerald-500 text-white rounded">Підтвердити</button>}
                     {u.approved && !u.roles?.includes('admin') && <button onClick={() => setApproved(u.id, false)} className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded">Заблокувати</button>}
-                    <button onClick={() => delUser(u.id)} className="text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => delUser(u.id)} className="w-10 h-10 flex items-center justify-center text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </td>
               </tr>
@@ -308,6 +321,32 @@ function UsersTab({ allLocations }) {
         </table>
         {filtered.length === 0 && <div className="p-8 text-center text-stone-400 italic">Нічого не знайдено</div>}
       </Card>
+
+      {/* Mobile: картки */}
+      <div className="md:hidden space-y-3">
+        {filtered.map((u) => (
+          <Card key={u.id} className="p-4">
+            <div className="flex items-start gap-3">
+              <input type="checkbox" className="mt-1 w-4 h-4" checked={sel.has(u.id)} onChange={() => toggleSel(u.id)} />
+              <button onClick={() => setDetail(u.id)} className="flex-1 text-left" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                <div className="text-sm text-stone-800">{u.name}{u.surname ? ` ${u.surname}` : ''}</div>
+                <div className="text-xs text-stone-500 break-all">{u.email}</div>
+                {u.requestedRole && <div className="text-xs text-stone-400">бажана: {roleName(u.requestedRole)}</div>}
+              </button>
+              {u.approved
+                ? <span className="text-xs px-2 py-1 bg-emerald-50 text-emerald-700 rounded border border-emerald-200 flex-shrink-0">Підтв.</span>
+                : <span className="text-xs px-2 py-1 bg-amber-50 text-amber-700 rounded border border-amber-200 flex-shrink-0">Очікує</span>}
+            </div>
+            <div className="mt-3"><RoleChips user={u} onAdd={addRole} onRemove={removeRole} /></div>
+            <div className="mt-3 pt-3 border-t border-stone-100 flex gap-2">
+              {!u.approved && <button onClick={() => setApproved(u.id, true)} className="flex-1 min-h-[44px] text-sm bg-emerald-500 text-white rounded">Підтвердити</button>}
+              {u.approved && !u.roles?.includes('admin') && <button onClick={() => setApproved(u.id, false)} className="flex-1 min-h-[44px] text-sm bg-stone-100 text-stone-700 rounded">Заблокувати</button>}
+              <button onClick={() => delUser(u.id)} className="w-12 min-h-[44px] flex items-center justify-center bg-rose-50 text-rose-500 rounded"><Trash2 className="w-4 h-4" /></button>
+            </div>
+          </Card>
+        ))}
+        {filtered.length === 0 && <Card className="p-8 text-center text-stone-400 italic">Нічого не знайдено</Card>}
+      </div>
 
       {detail && <UserDetailModal id={detail} onClose={() => setDetail(null)} />}
     </div>
@@ -319,11 +358,11 @@ function UserDetailModal({ id, onClose }) {
   useEffect(() => { apiGet(`/api/admin/users/${id}`).then(setU).catch((e) => console.error(e)); }, [id]);
 
   return (
-    <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-lg max-w-lg w-full max-h-[85vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
+    <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch md:items-center justify-center md:p-4" onClick={onClose}>
+      <div className="bg-white w-full h-full md:h-auto md:max-w-lg md:max-h-[85vh] overflow-y-auto rounded-none md:rounded-lg p-5 md:p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4 sticky -top-5 md:-top-6 bg-white py-2 -my-2">
           <h3 className="text-xl text-stone-800">Деталі користувача</h3>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
         </div>
         {!u ? <p className="text-stone-400 italic">Завантаження…</p> : (
           <div className="space-y-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
@@ -444,22 +483,22 @@ function LocationsTab({ allLocations, reloadLocations }) {
       </Card>
 
       {assignOpen && (
-        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-lg w-full sm:max-w-md p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg text-stone-800">Призначити користувача</h3>
-              <button onClick={() => setAssignOpen(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+              <button onClick={() => setAssignOpen(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
             </div>
             <select value={assign.userId} onChange={(e) => setAssign({ ...assign, userId: e.target.value })}
-              className="w-full px-3 py-2 border border-stone-200 rounded-md mb-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md mb-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
               <option value="">— оберіть користувача —</option>
               {users.map((u) => <option key={u.id} value={u.id}>{u.name}{u.surname ? ` ${u.surname}` : ''} ({u.email})</option>)}
             </select>
-            <label className="flex items-center gap-2 text-sm text-stone-600 mb-4">
-              <input type="checkbox" checked={assign.isManager} onChange={(e) => setAssign({ ...assign, isManager: e.target.checked })} />
+            <label className="flex items-center gap-2 text-sm text-stone-600 mb-4 min-h-[44px]">
+              <input type="checkbox" className="w-4 h-4" checked={assign.isManager} onChange={(e) => setAssign({ ...assign, isManager: e.target.checked })} />
               Керівник локації
             </label>
-            <button onClick={doAssign} disabled={!assign.userId} className="w-full px-4 py-2 bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">Призначити</button>
+            <button onClick={doAssign} disabled={!assign.userId} className="w-full px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">Призначити</button>
           </div>
         </div>
       )}
@@ -610,7 +649,8 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
         </div>
       )}
 
-      <Card className="overflow-hidden">
+      {/* Desktop: таблиця */}
+      <Card className="overflow-hidden hidden md:block">
         <table className="w-full">
           <thead className="bg-stone-50 border-b border-stone-200">
             <tr>
@@ -643,6 +683,27 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
         </table>
         {filtered.length === 0 && <div className="p-8 text-center text-stone-400 italic">Статей не знайдено</div>}
       </Card>
+
+      {/* Mobile: картки */}
+      <div className="md:hidden space-y-3">
+        {filtered.map((a) => (
+          <Card key={a.id} className="p-4">
+            <div className="flex items-start gap-3">
+              <input type="checkbox" className="mt-1 w-4 h-4" checked={sel.has(a.id)} onChange={() => toggle(a.id)} />
+              <div className="flex-1 min-w-0" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                <div className="text-sm text-stone-800">{a.title}</div>
+                <div className="text-xs text-stone-400 mb-2">{new Date(a.createdAt).toLocaleDateString('uk-UA')} · {a.authorName || '—'}</div>
+                <div className="flex flex-wrap gap-1 items-center">
+                  <span className={`text-xs px-2 py-0.5 rounded-full border ${ROLES[topicRole(a)]?.color || 'bg-stone-100'}`}>{roleName(topicRole(a))}</span>
+                  {(a.locations || []).length === 0 ? <span className="text-xs text-stone-400 italic">усі локації</span> :
+                    a.locations.map((l) => <span key={l.locationId} className="text-xs px-1.5 py-0.5 rounded text-white" style={{ background: l.color || '#a8a29e' }}>{l.name}</span>)}
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
+        {filtered.length === 0 && <Card className="p-8 text-center text-stone-400 italic">Статей не знайдено</Card>}
+      </div>
       <p className="text-xs text-stone-400 italic">Усього статей: {articles.length} · показано {filtered.length}</p>
 
       {publishOpen && (
@@ -681,13 +742,13 @@ function PublishModal({ topicsMap, allLocations, onClose, onCreated }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-stone-200 flex items-center justify-between">
-          <h2 className="text-xl text-stone-800">Опублікувати статтю</h2>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+    <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch md:items-center justify-center md:p-4">
+      <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
+        <div className="p-4 md:p-6 border-b border-stone-200 flex items-center justify-between sticky top-0 bg-white z-10">
+          <h2 className="text-lg md:text-xl text-stone-800">Опублікувати статтю</h2>
+          <button onClick={onClose} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
         </div>
-        <div className="p-6 space-y-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
+        <div className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1" style={{ fontFamily: 'system-ui, sans-serif' }}>
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Роль</label>
@@ -721,9 +782,9 @@ function PublishModal({ topicsMap, allLocations, onClose, onCreated }) {
           </div>
           {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
         </div>
-        <div className="p-6 border-t border-stone-200 flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 bg-stone-100 text-stone-700 rounded-md text-sm">Скасувати</button>
-          <button onClick={save} disabled={busy} className="px-4 py-2 bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">{busy ? 'Збереження…' : 'Опублікувати'}</button>
+        <div className="p-4 md:p-6 border-t border-stone-200 flex gap-2 justify-end sticky bottom-0 bg-white">
+          <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 text-stone-700 rounded-md text-sm">Скасувати</button>
+          <button onClick={save} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">{busy ? 'Збереження…' : 'Опублікувати'}</button>
         </div>
       </div>
     </div>
@@ -898,13 +959,13 @@ function AuditTab() {
   useEffect(() => { load(''); }, []);
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
+    <Card className="p-5 md:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h3 className="text-lg text-stone-800">Журнал дій</h3>
         <div className="flex gap-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
           <input value={fAction} onChange={(e) => setFAction(e.target.value)} placeholder="Фільтр за дією (напр. user.)"
-            className="px-3 py-1.5 border border-stone-200 rounded-md text-sm" onKeyDown={(e) => e.key === 'Enter' && load(fAction)} />
-          <button onClick={() => load(fAction)} className="px-3 py-1.5 bg-stone-700 text-white rounded-md text-sm">Фільтр</button>
+            className="flex-1 sm:flex-none px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" onKeyDown={(e) => e.key === 'Enter' && load(fAction)} />
+          <button onClick={() => load(fAction)} className="px-4 min-h-[44px] bg-stone-700 text-white rounded-md text-sm">Фільтр</button>
         </div>
       </div>
       {loading ? <p className="text-stone-400 italic text-sm">Завантаження…</p> : logs.length === 0 ? (
@@ -912,11 +973,11 @@ function AuditTab() {
       ) : (
         <div className="space-y-1.5">
           {logs.map((a) => (
-            <div key={a.id} className="flex items-center justify-between text-sm border-b border-stone-100 last:border-0 py-1.5">
-              <span className="text-stone-700">
+            <div key={a.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 text-sm border-b border-stone-100 last:border-0 py-2">
+              <span className="text-stone-700 break-words">
                 <b className="text-stone-900">{a.actorName}</b> · <code className="text-xs text-rose-600">{a.action}</code> · {a.targetType}{a.targetId ? ` (${a.targetId.slice(0, 8)})` : ''}
               </span>
-              <span className="text-xs text-stone-400">{fmtDate(a.createdAt)}</span>
+              <span className="text-xs text-stone-400 flex-shrink-0">{fmtDate(a.createdAt)}</span>
             </div>
           ))}
         </div>
