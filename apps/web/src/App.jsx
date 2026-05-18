@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Trash2, Check, X, Search, Settings, ChevronRight, Users, FileText, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
