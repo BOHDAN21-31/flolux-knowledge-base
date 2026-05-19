@@ -468,6 +468,7 @@ function NotificationSettings() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+      <TelegramSection />
       <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
         <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4">Сповіщення</h3>
         {!pref ? (
@@ -483,6 +484,113 @@ function NotificationSettings() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const BOT_USERNAME = 'Flolux_Librarybot';
+
+function TelegramSection() {
+  const confirm = useConfirm();
+  const [status, setStatus] = useState(null); // {linked, username, linkedAt}
+  const [pref, setPref] = useState(null);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState('');
+
+  const loadStatus = () => apiGet('/api/users/me/telegram').then(setStatus).catch(() => {});
+  useEffect(() => {
+    loadStatus();
+    apiGet('/api/users/me/notification-preferences').then(setPref).catch(() => {});
+  }, []);
+
+  // Поки показано код і ще не прив'язано — опитуємо статус кожні 3 с
+  useEffect(() => {
+    if (!code || status?.linked) return undefined;
+    const t = setInterval(loadStatus, 3000);
+    return () => clearInterval(t);
+  }, [code, status?.linked]);
+
+  useEffect(() => { if (status?.linked) setCode(''); }, [status?.linked]);
+
+  const generate = async () => {
+    setBusy(true);
+    try {
+      const r = await apiPost('/api/users/me/telegram/generate-code');
+      setCode(r.code);
+    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+
+  const copy = (text, what) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(what);
+      setTimeout(() => setCopied(''), 1800);
+    }).catch(() => {});
+  };
+
+  const toggleTg = async () => {
+    const next = !pref?.telegramEnabled;
+    setPref((p) => ({ ...p, telegramEnabled: next }));
+    apiPatch('/api/users/me/notification-preferences', { telegramEnabled: next }).catch(() => {});
+  };
+
+  const disconnect = async () => {
+    const ok = await confirm({
+      title: 'Відключити Telegram?',
+      description: 'Ви більше не отримуватимете сповіщення в Telegram. Прив’язку можна відновити пізніше.',
+      confirmLabel: 'Відключити',
+    });
+    if (!ok) return;
+    await apiDelete('/api/users/me/telegram').catch(() => {});
+    setCode('');
+    await loadStatus();
+  };
+
+  return (
+    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6" style={{ fontFamily: 'system-ui, sans-serif' }}>
+      <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4">📱 Telegram</h3>
+
+      {status?.linked ? (
+        <div className="space-y-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-sm">✅ Підключено</div>
+          {status.username && <div className="text-sm text-stone-600 dark:text-stone-300">Username: @{status.username}</div>}
+          {status.linkedAt && <div className="text-sm text-stone-500 dark:text-stone-400">Прив’язано: {new Date(status.linkedAt).toLocaleDateString('uk-UA')}</div>}
+          <label className="flex items-center justify-between gap-3 py-2 border-t border-stone-100 dark:border-stone-800 mt-2 cursor-pointer min-h-[44px]">
+            <span className="text-sm text-stone-700 dark:text-stone-200">Отримувати сповіщення в Telegram</span>
+            <input type="checkbox" className="w-5 h-5 accent-rose-500" checked={pref?.telegramEnabled !== false} onChange={toggleTg} />
+          </label>
+          <button onClick={disconnect} className="px-4 min-h-[44px] rounded-md text-sm bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:text-rose-600">
+            Відключити
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-stone-600 dark:text-stone-300">Отримуйте сповіщення про нові статті та події прямо в Telegram.</p>
+          {!code ? (
+            <button onClick={generate} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 hover:bg-rose-600 disabled:opacity-60 text-white rounded-md text-sm">
+              {busy ? 'Генерація…' : 'Згенерувати код'}
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <code className="text-2xl tracking-widest px-4 py-2 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-100">{code}</code>
+                <button onClick={() => copy(code, 'code')} className="px-3 min-h-[44px] rounded-md text-sm border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300">
+                  {copied === 'code' ? 'Скопійовано' : 'Скопіювати'}
+                </button>
+              </div>
+              <ol className="text-sm text-stone-600 dark:text-stone-300 list-decimal pl-5 space-y-1">
+                <li>Відкрийте бота: <a href={`https://t.me/${BOT_USERNAME}`} target="_blank" rel="noreferrer" className="text-rose-600 hover:underline">@{BOT_USERNAME}</a></li>
+                <li>Надішліть боту: <code>/start {code}</code></li>
+                <li>Готово!</li>
+              </ol>
+              <button onClick={() => copy(`/start ${code}`, 'cmd')} className="px-4 min-h-[44px] rounded-md text-sm border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300">
+                {copied === 'cmd' ? 'Скопійовано' : `Скопіювати команду /start ${code}`}
+              </button>
+              <p className="text-xs text-stone-400 italic">Очікую підтвердження від Telegram…</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

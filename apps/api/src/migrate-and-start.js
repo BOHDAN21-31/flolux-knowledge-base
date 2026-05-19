@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 
 import { prisma } from './db.js';
 import { seedTopics, seedLocations, seedRoles, seedSpecialTopics } from './seed.js';
+import { initTelegram, setupWebhook } from './services/telegram.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const API_ROOT = path.join(__dirname, '..');
@@ -56,6 +57,13 @@ async function main() {
   }
 
   await import('./index.js');
+
+  try {
+    initTelegram();
+    await setupWebhook();
+  } catch (e) {
+    console.error('[startup] Telegram init failed:', e.message);
+  }
 }
 
 main();

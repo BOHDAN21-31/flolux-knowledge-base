@@ -22,6 +22,10 @@ model User {
   assignedRole  String?
   approved      Boolean      @default(false)
   birthday      DateTime?    @db.Date
+  telegramChatId   String?   @unique
+  telegramUsername String?
+  telegramLinkCode String?    @unique
+  telegramLinkedAt DateTime?
   createdAt     DateTime     @default(now())
   articles      Article[]
   comments      Comment[]
@@ -71,6 +75,7 @@ model NotificationPreference {
   digests              Boolean  @default(true)
   roleChanges          Boolean  @default(true)
   locationChanges      Boolean  @default(true)
+  telegramEnabled      Boolean  @default(true)
   updatedAt            DateTime @default(now()) @updatedAt
 }
 

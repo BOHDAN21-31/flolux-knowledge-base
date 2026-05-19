@@ -1,4 +1,21 @@
 import { prisma } from '../db.js';
+import { sendMessage } from './telegram.js';
+
+const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Дзеркалення сповіщення в Telegram. Fire-and-forget, ніколи не валить notify().
+function dispatchTelegram(recipient, { title, body, linkPath }) {
+  try {
+    if (!recipient?.telegramChatId) return;
+    if (recipient.notificationPref && recipient.notificationPref.telegramEnabled === false) return;
+    const origin = process.env.ORIGIN || '';
+    const link = origin + (linkPath || '/');
+    const text = `<b>${esc(title)}</b>\n${esc(body || '')}\n\n<a href="${esc(link)}">Відкрити на сайті</a>`;
+    sendMessage(recipient.telegramChatId, text).catch((e) => console.error('[telegram dispatch] failed', e.message));
+  } catch (e) {
+    console.error('[telegram dispatch]', e.message);
+  }
+}
 
 // type -> поле NotificationPreference, яке вмикає/вимикає цей тип.
 const TYPE_PREF = {
@@ -42,6 +59,15 @@ export async function notify({ recipientIds, type, title, body, linkPath, actorI
       })),
     });
     console.log('[notify] created', allowed.length);
+
+    // Дзеркалення у Telegram (fire-and-forget, не блокує і не валить notify)
+    prisma.user.findMany({
+      where: { id: { in: allowed }, telegramChatId: { not: null } },
+      select: { telegramChatId: true, notificationPref: { select: { telegramEnabled: true } } },
+    }).then((rcpts) => {
+      rcpts.forEach((r) => dispatchTelegram(r, { title, body, linkPath }));
+    }).catch((e) => console.error('[notify] telegram fanout', e.message));
+
     return allowed;
   } catch (e) {
     console.error('[notify]', type, e.message);

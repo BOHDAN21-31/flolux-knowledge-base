@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { requireAuth, publicUser } from '../auth.js';
@@ -148,9 +149,37 @@ router.get('/me/birthday', requireAuth, wrap(async (req, res) => {
   res.json({ birthday: u?.birthday ? u.birthday.toISOString().slice(0, 10) : null });
 }));
 
+// ===== Telegram прив'язка =====
+router.get('/me/telegram', requireAuth, wrap(async (req, res) => {
+  const u = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    select: { telegramChatId: true, telegramUsername: true, telegramLinkedAt: true },
+  });
+  res.json({
+    linked: !!u?.telegramChatId,
+    username: u?.telegramUsername || null,
+    linkedAt: u?.telegramLinkedAt ? u.telegramLinkedAt.getTime() : null,
+  });
+}));
+
+router.post('/me/telegram/generate-code', requireAuth, wrap(async (req, res) => {
+  const code = crypto.randomBytes(3).toString('hex').toUpperCase(); // 6 символів
+  await prisma.user.update({ where: { id: req.user.id }, data: { telegramLinkCode: code } });
+  res.json({ code, botUsername: 'Flolux_Librarybot' });
+}));
+
+router.delete('/me/telegram', requireAuth, wrap(async (req, res) => {
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: { telegramChatId: null, telegramUsername: null, telegramLinkCode: null, telegramLinkedAt: null },
+  });
+  res.json({ ok: true });
+}));
+
 const PREF_FIELDS = [
   'newArticleAll', 'newArticleMyRole', 'newArticleMyLocation', 'comments',
   'suggestions', 'suggestionApproved', 'birthdays', 'digests', 'roleChanges', 'locationChanges',
+  'telegramEnabled',
 ];
 
 // GET /api/users/me/notification-preferences (створює дефолт якщо немає)

@@ -18,6 +18,7 @@ import searchRoutes from './routes/search.js';
 import notificationRoutes from './routes/notifications.js';
 import birthdayRoutes from './routes/birthdays.js';
 import digestRoutes from './routes/digests.js';
+import telegramRoutes from './routes/telegram.js';
 import uploadRoutes, { UPLOAD_DIR } from './routes/upload.js';
 import webauthnRoutes from './routes/webauthn.js';
 
@@ -44,6 +45,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/birthdays', birthdayRoutes);
 app.use('/api/digests', digestRoutes);
+app.use('/api/telegram', telegramRoutes); // webhook — без auth (перевірка через secret_token)
 app.use('/api/upload', uploadRoutes);
 
 // Невідомий /api маршрут -> 404 JSON (щоб не повертати SPA)
