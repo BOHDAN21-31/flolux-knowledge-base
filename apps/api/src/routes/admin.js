@@ -1,11 +1,46 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
-import { publicUser, requireAuth, requireAdmin } from '../auth.js';
+import { publicUser, requireAuth, requireAdmin, requireHrOrAdmin } from '../auth.js';
 import { wrap, logAction, syncPrimaryRole, slugify, roleExists } from '../lib.js';
 import { serializeLocation } from './locations.js';
 import { serializeRole } from './roles.js';
+import { notifyRoleAssigned, notifyLocationApproved } from '../services/notifications.js';
 
 const router = Router();
+
+// ===== Дні народження (HR/admin) — оголошено ДО глобального requireAdmin =====
+router.patch('/users/:id/birthday', requireAuth, requireHrOrAdmin, wrap(async (req, res) => {
+  const { birthday } = req.body || {};
+  if (!birthday || Number.isNaN(new Date(birthday).getTime())) {
+    return res.status(400).json({ error: 'Невірна дата народження' });
+  }
+  const user = await prisma.user.update({
+    where: { id: req.params.id },
+    data: { birthday: new Date(birthday) },
+    select: { id: true, birthday: true },
+  });
+  await logAction(req.user.id, 'user.birthday_set', 'user', req.params.id, { birthday });
+  res.json({ id: user.id, birthday: user.birthday });
+}));
+
+router.delete('/users/:id/birthday', requireAuth, requireHrOrAdmin, wrap(async (req, res) => {
+  await prisma.user.update({ where: { id: req.params.id }, data: { birthday: null } });
+  await logAction(req.user.id, 'user.birthday_cleared', 'user', req.params.id);
+  res.json({ ok: true });
+}));
+
+// Легкий список користувачів для керування ДН (HR/admin)
+router.get('/birthday-list', requireAuth, requireHrOrAdmin, wrap(async (req, res) => {
+  const users = await prisma.user.findMany({
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true, surname: true, birthday: true },
+  });
+  res.json(users.map((u) => ({
+    id: u.id,
+    name: `${u.name}${u.surname ? ' ' + u.surname : ''}`,
+    birthday: u.birthday ? u.birthday.toISOString().slice(0, 10) : null,
+  })));
+}));
 
 router.use(requireAuth, requireAdmin);
 
@@ -85,6 +120,7 @@ router.post('/users/:id/roles', wrap(async (req, res) => {
   });
   await syncPrimaryRole(req.params.id);
   await logAction(req.user.id, 'user.role_added', 'user', req.params.id, { role });
+  await notifyRoleAssigned(req.params.id, role, req.user.id);
 
   const updated = await prisma.user.findUnique({ where: { id: req.params.id }, include: { roles: true } });
   res.json(publicUser(updated));
@@ -300,6 +336,7 @@ router.patch('/location-requests/:id', wrap(async (req, res) => {
       update: { approved: true },
       create: { userId: lr.userId, locationId: lr.locationId, approved: true },
     });
+    await notifyLocationApproved(lr.userId, lr.locationId, req.user.id);
   }
   await logAction(req.user.id, 'location_request.' + status, 'location', lr.locationId, { userId: lr.userId });
   res.json({ id: updated.id, status: updated.status });

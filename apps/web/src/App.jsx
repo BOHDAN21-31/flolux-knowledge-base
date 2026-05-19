@@ -7,6 +7,8 @@ import PublicProfile from './components/PublicProfile';
 import AdminPanel from './components/AdminPanel';
 import GlobalSearch from './components/GlobalSearch';
 import MarkdownEditor from './components/MarkdownEditor';
+import NotificationBell from './components/NotificationBell';
+import NotificationsPage from './components/NotificationsPage';
 import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
 import Stars from './Stars';
 import { userRoles, isAdminUser } from './roles';
@@ -21,6 +23,7 @@ function pathForFrame(f) {
   switch (f?.type) {
     case 'tech': return '/tech';
     case 'profile': return f.section ? `/profile/${f.section}` : '/profile';
+    case 'notifications': return '/notifications';
     case 'admin': return f.tab ? `/admin/${f.tab}` : '/admin';
     case 'publicProfile': return `/users/${f.userId}`;
     case 'topic': return `/topics/${f.topicId}`;
@@ -35,9 +38,10 @@ function frameFromPath(pathname) {
   if (p === '/' || p === '') return { type: 'home' };
   if (p === '/tech') return { type: 'tech' };
   if (p === '/profile') return { type: 'profile' };
+  if (p === '/notifications') return { type: 'notifications' };
   if (p === '/admin') return { type: 'admin' };
   let m;
-  if ((m = p.match(/^\/profile\/(data|security|locations)$/))) return { type: 'profile', section: m[1] };
+  if ((m = p.match(/^\/profile\/(data|security|locations|notifications)$/))) return { type: 'profile', section: m[1] };
   if ((m = p.match(/^\/users\/([^/]+)$/))) return { type: 'publicProfile', userId: m[1] };
   if ((m = p.match(/^\/admin\/([^/]+)$/))) return { type: 'admin', tab: m[1] };
   if ((m = p.match(/^\/topics\/([^/]+)\/new$/))) return { type: 'createArticle', topicId: m[1] };
@@ -46,7 +50,7 @@ function frameFromPath(pathname) {
   if ((m = p.match(/^\/articles\/([^/]+)$/))) return { type: 'article', articleId: m[1] };
   return { type: 'home' };
 }
-const TOP_LEVEL = ['home', 'tech', 'admin', 'profile'];
+const TOP_LEVEL = ['home', 'tech', 'admin', 'profile', 'notifications'];
 
 // ============ КОНСТАНТИ ============
 const REFERRAL_WORD = 'Flolux';
@@ -103,6 +107,10 @@ function AppInner() {
   const push = (frame) => go([...stack, frame]);
   const back = () => go(stack.length > 1 ? stack.slice(0, -1) : [{ type: 'home' }]);
   const reset = (frame) => go([frame]);
+  const navigatePath = (path) => {
+    const f = frameFromPath(path);
+    if (TOP_LEVEL.includes(f.type)) reset(f); else push(f);
+  };
 
   // URL → стек (reload, ручний перехід, browser back/forward)
   useEffect(() => {
@@ -202,6 +210,8 @@ function AppInner() {
   if (!dataLoaded) return <Splash text="Готуємо вашу базу знань..." />;
 
   const isAdmin = isAdminUser(currentUser);
+  const isHr = userRoles(currentUser).includes('hr');
+  const canAdminArea = isAdmin || isHr;
 
   const allTopics = Object.values(topicsMap).flat();
   const topicById = (id) => allTopics.find((t) => t.id === id) || null;
@@ -221,6 +231,7 @@ function AppInner() {
         isAdmin={isAdmin}
         onTopicClick={(t) => push({ type: 'topic', topicId: t.id })}
         onArticleClick={(a) => push({ type: 'article', articleId: a.id })}
+        onOpenUser={(id) => push({ type: 'publicProfile', userId: id })}
         onGoProfile={() => reset({ type: 'profile' })}
       />
     );
@@ -245,6 +256,8 @@ function AppInner() {
         onOpenArticle={(id) => push({ type: 'article', articleId: id })}
       />
     );
+  } else if (current.type === 'notifications') {
+    screen = <NotificationsPage onBack={back} onOpenPath={navigatePath} />;
   } else if (current.type === 'tech') {
     screen = (
       <TechView
@@ -253,7 +266,7 @@ function AppInner() {
         onTopicClick={(t) => push({ type: 'topic', topicId: t.id })}
       />
     );
-  } else if (current.type === 'admin' && isAdmin) {
+  } else if (current.type === 'admin' && canAdminArea) {
     screen = (
       <AdminPanel
         topicsMap={topicsMap}
@@ -262,7 +275,8 @@ function AppInner() {
         allLocations={allLocations}
         reloadLocations={reloadLocations}
         reloadArticles={reloadArticles}
-        tab={current.tab || 'dashboard'}
+        isAdmin={isAdmin}
+        tab={current.tab || (isAdmin ? 'dashboard' : 'birthdays')}
         onTab={(t) => reset({ type: 'admin', tab: t })}
       />
     );
@@ -324,9 +338,13 @@ function AppInner() {
         onProfile={() => reset({ type: 'profile' })}
         view={navView}
         isAdmin={isAdmin}
+        canAdmin={canAdminArea}
         theme={theme}
         onToggleTheme={toggleTheme}
         onOpenSearch={() => setSearchOpen(true)}
+        onOpenPath={navigatePath}
+        onOpenAllNotifications={() => reset({ type: 'notifications' })}
+        onOpenNotifSettings={() => reset({ type: 'profile', section: 'notifications' })}
       />
 
       <main className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8 pb-24 md:pb-8">
@@ -336,6 +354,7 @@ function AppInner() {
       <MobileBottomNav
         view={navView}
         isAdmin={isAdmin}
+        canAdmin={canAdminArea}
         onNavigate={(v) => reset({ type: v })}
         onProfile={() => reset({ type: 'profile' })}
       />
@@ -587,7 +606,7 @@ function HeaderAvatar({ user, primary, size }) {
   );
 }
 
-function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, theme, onToggleTheme, onOpenSearch }) {
+function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, canAdmin, theme, onToggleTheme, onOpenSearch, onOpenPath, onOpenAllNotifications, onOpenNotifSettings }) {
   const { roleName } = useRoles();
   const roles = userRoles(user);
   const primary = isAdmin ? 'admin' : (user.role || roles[0] || null);
@@ -614,7 +633,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, theme, o
           <nav className="hidden md:flex items-center gap-1">
             <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{isAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</NavBtn>
             <NavBtn active={view === 'tech'} onClick={() => onNavigate('tech')} icon={Wrench}>Технічка</NavBtn>
-            {isAdmin && <NavBtn active={view === 'admin'} onClick={() => onNavigate('admin')} icon={Shield}>Адмін</NavBtn>}
+            {canAdmin && <NavBtn active={view === 'admin'} onClick={() => onNavigate('admin')} icon={Shield}>{isAdmin ? 'Адмін' : 'HR'}</NavBtn>}
           </nav>
         </div>
 
@@ -628,6 +647,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, theme, o
           <button onClick={onToggleTheme} className="w-10 h-10 flex items-center justify-center text-stone-500 dark:text-stone-400 dark:text-stone-300 hover:text-rose-500" title="Тема">
             <ThemeIcon className="w-5 h-5" />
           </button>
+          <NotificationBell onOpenPath={onOpenPath} onOpenAll={onOpenAllNotifications} onOpenSettings={onOpenNotifSettings} />
           <button onClick={onProfile} className="text-right group" title="Мій профіль">
             <div className="text-sm text-stone-700 dark:text-stone-200 group-hover:text-rose-600 transition" style={{ fontFamily: 'system-ui, sans-serif' }}>
               {user.name}{user.surname ? ` ${user.surname}` : ''}
@@ -648,6 +668,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, theme, o
           <button onClick={onToggleTheme} className="w-11 h-11 flex items-center justify-center text-stone-500 dark:text-stone-400 dark:text-stone-300" aria-label="Тема">
             <ThemeIcon className="w-5 h-5" />
           </button>
+          <NotificationBell onOpenPath={onOpenPath} onOpenAll={onOpenAllNotifications} onOpenSettings={onOpenNotifSettings} />
           <button onClick={onProfile} className="w-11 h-11 flex items-center justify-center" title="Мій профіль">
             <HeaderAvatar user={user} primary={primary} size="w-9 h-9" />
           </button>
@@ -671,13 +692,13 @@ function NavBtn({ active, onClick, icon: Icon, children }) {
 }
 
 // Нижня навігація для мобільного (основні розділи). Десктоп — прихована.
-function MobileBottomNav({ view, isAdmin, onNavigate, onProfile }) {
+function MobileBottomNav({ view, isAdmin, canAdmin, onNavigate, onProfile }) {
   const items = [
     { key: 'home', label: isAdmin ? 'Бібліотека' : 'Бібліотека', icon: BookOpen, onClick: () => onNavigate('home') },
     { key: 'tech', label: 'Технічка', icon: Wrench, onClick: () => onNavigate('tech') },
     { key: 'profile', label: 'Профіль', icon: User, onClick: onProfile },
   ];
-  if (isAdmin) items.push({ key: 'admin', label: 'Адмін', icon: Shield, onClick: () => onNavigate('admin') });
+  if (canAdmin) items.push({ key: 'admin', label: isAdmin ? 'Адмін' : 'HR', icon: Shield, onClick: () => onNavigate('admin') });
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 flex"
@@ -706,7 +727,7 @@ function FilterChip({ label, onRemove }) {
   );
 }
 
-function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicClick, onArticleClick, onGoProfile }) {
+function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicClick, onArticleClick, onOpenUser, onGoProfile }) {
   const { roleName, roleKeys, roleChipStyle, byKey } = useRoles();
   const roles = userRoles(user);
   const [roleFilter, setRoleFilter] = useState('all');
@@ -721,6 +742,9 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
   const [bookmarks, setBookmarks] = useState([]);
   const [drafts, setDrafts] = useState([]);
   const [popular, setPopular] = useState([]);
+  const [bdToday, setBdToday] = useState([]);
+  const [bdSoon, setBdSoon] = useState([]);
+  const [digests, setDigests] = useState([]);
   const recent = getRecent();
 
   useEffect(() => {
@@ -729,11 +753,17 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
       apiGet('/api/users/me/bookmarks').catch(() => []),
       apiGet('/api/articles?status=draft').catch(() => []),
       apiGet('/api/articles/popular?limit=8').catch(() => []),
-    ]).then(([b, d, p]) => {
+      apiGet('/api/birthdays/today').catch(() => []),
+      apiGet('/api/birthdays/upcoming?days=7').catch(() => []),
+      apiGet('/api/digests').catch(() => []),
+    ]).then(([b, d, p, bt, bs, dg]) => {
       if (!active) return;
       setBookmarks(Array.isArray(b) ? b : []);
       setDrafts(Array.isArray(d) ? d : []);
       setPopular(Array.isArray(p) ? p : []);
+      setBdToday(Array.isArray(bt) ? bt : []);
+      setBdSoon(Array.isArray(bs) ? bs.filter((x) => x.inDays > 0) : []);
+      setDigests(Array.isArray(dg) ? dg : []);
     });
     return () => { active = false; };
   }, []);
@@ -997,6 +1027,64 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {(bdToday.length > 0 || bdSoon.length > 0) && (
+            <div className="mb-8 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5">
+              <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-3">🎂 Дні народження</h2>
+              {bdToday.length > 0 && (
+                <div className="mb-3">
+                  <div className="text-sm text-stone-700 dark:text-stone-200 mb-2">Сьогодні святкують:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {bdToday.map((u) => (
+                      <button key={u.id} onClick={() => onOpenUser?.(u.id)}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 dark:bg-stone-800 border border-rose-200 dark:border-stone-700 text-sm text-stone-800 dark:text-stone-100">
+                        <span className="w-6 h-6 rounded-full overflow-hidden bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-xs">
+                          {u.avatarUrl ? <img src={u.avatarUrl} alt="" className="w-full h-full object-cover" /> : (u.name || '?')[0]}
+                        </span>
+                        {u.name} <span className="text-rose-600">🎉 Привітати</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {bdSoon.length > 0 && (
+                <div>
+                  <div className="text-sm text-stone-500 dark:text-stone-400 mb-2">Цього тижня:</div>
+                  <div className="flex flex-wrap gap-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                    {bdSoon.map((u) => (
+                      <button key={u.id} onClick={() => onOpenUser?.(u.id)}
+                        className="text-xs px-2.5 py-1 rounded-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300">
+                        {u.name} · через {u.inDays} дн.
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {digests.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-3">📢 Дайджест компанії</h2>
+              <button onClick={() => onArticleClick({ id: digests[0].id })}
+                className="block w-full text-left rounded-lg p-5 text-white mb-3"
+                style={{ background: 'linear-gradient(120deg,#a855f7,#ec4899)' }}>
+                <div className="text-xs uppercase tracking-widest opacity-80 mb-1">{new Date(digests[0].createdAt).toLocaleDateString('uk-UA')}</div>
+                <div className="text-lg md:text-xl">{digests[0].title}</div>
+              </button>
+              {digests.length > 1 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {digests.slice(1, 4).map((d) => (
+                    <button key={d.id} onClick={() => onArticleClick({ id: d.id })}
+                      className="text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-3 hover:border-rose-300 transition">
+                      <div className="text-xs text-stone-400 mb-1">{new Date(d.createdAt).toLocaleDateString('uk-UA')}</div>
+                      <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-2">{d.title}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1371,6 +1459,9 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
             </div>
 
             <div className="flex flex-wrap items-center gap-2 mb-4">
+              {article.isDigest && (
+                <span className="px-2 py-0.5 rounded-full text-xs text-white" style={{ background: 'linear-gradient(90deg,#a855f7,#ec4899)' }}>📢 Дайджест</span>
+              )}
               {article.status === 'draft' && (
                 <span className="px-2 py-0.5 rounded-full text-xs bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">📝 Чернетка</span>
               )}
@@ -1546,6 +1637,13 @@ const mediaType = (url) => (/\.(mp4|mov|webm)$/i.test(url) ? 'video' : 'image');
 
 function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved }) {
   const isEdit = mode === 'edit';
+  const { roleKeys, roleName } = useRoles();
+  const [notifyOn, setNotifyOn] = useState(!!article?.notifyMode);
+  const [notifyMode, setNotifyMode] = useState(article?.notifyMode || 'all');
+  const [notifyTargets, setNotifyTargets] = useState(
+    Array.isArray(article?.notifyTargets) ? article.notifyTargets : []
+  );
+  const toggleTarget = (v) => setNotifyTargets((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]));
   const [form, setForm] = useState({
     title: article?.title || '',
     content: article?.content || '',
@@ -1621,6 +1719,8 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
         mediaUrls: mediaUrls.map((m) => m.url),
         status: pubMode === 'draft' ? 'draft' : 'published',
         publishAt: pubMode === 'schedule' && publishAt ? new Date(publishAt).toISOString() : null,
+        notifyMode: notifyOn ? notifyMode : null,
+        notifyTargets: notifyOn && notifyMode !== 'all' ? notifyTargets : [],
       };
       if (isEdit) {
         await apiPatch(`/api/articles/${article.id}`, payload);
@@ -1726,6 +1826,45 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+            <label className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-200 min-h-[40px]">
+              <input type="checkbox" className="w-4 h-4 accent-rose-500" checked={notifyOn} onChange={(e) => setNotifyOn(e.target.checked)} />
+              Оповістити про публікацію
+            </label>
+            {notifyOn && (
+              <div className="mt-2 pl-1 space-y-2">
+                <div className="flex flex-wrap gap-3 text-sm text-stone-700 dark:text-stone-200">
+                  {[['all', 'Усіх'], ['roles', 'Певні ролі'], ['locations', 'Певні локації']].map(([k, l]) => (
+                    <label key={k} className="flex items-center gap-1.5">
+                      <input type="radio" name="notifyMode" checked={notifyMode === k} onChange={() => { setNotifyMode(k); setNotifyTargets([]); }} /> {l}
+                    </label>
+                  ))}
+                </div>
+                {notifyMode === 'roles' && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {roleKeys.map((rk) => (
+                      <button key={rk} type="button" onClick={() => toggleTarget(rk)}
+                        className={`px-3 py-1 rounded-full text-xs border ${notifyTargets.includes(rk) ? 'bg-rose-500 text-white border-rose-500' : 'text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-600'}`}>
+                        {roleName(rk)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {notifyMode === 'locations' && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {allLocations.map((l) => (
+                      <button key={l.id} type="button" onClick={() => toggleTarget(l.id)}
+                        className={`px-3 py-1 rounded-full text-xs border ${notifyTargets.includes(l.id) ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300 dark:border-stone-600'}`}
+                        style={notifyTargets.includes(l.id) ? { background: l.color || '#a8a29e' } : undefined}>
+                        {l.name}{l.city ? <span className="opacity-70"> · {l.city}</span> : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

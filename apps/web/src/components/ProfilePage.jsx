@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { User, Lock, MapPin, Camera, Check, AlertCircle, Trash2, Fingerprint, Plus, Star, X } from 'lucide-react';
-import { apiPatch, apiPost, apiDelete, apiUpload, webauthnRegister, webauthnSupported } from '../api';
+import { apiGet, apiPatch, apiPost, apiDelete, apiUpload, webauthnRegister, webauthnSupported } from '../api';
 import { userRoles } from '../roles';
 import { useRoles } from '../RolesContext';
 import { accountLevel } from '../level';
@@ -13,8 +13,8 @@ function Banner({ error, success }) {
   return null;
 }
 
-const SEC_TO_TAB = { data: 'personal', security: 'security', locations: 'locations' };
-const TAB_TO_SEC = { personal: 'data', security: 'security', locations: 'locations' };
+const SEC_TO_TAB = { data: 'personal', security: 'security', locations: 'locations', notifications: 'notifications' };
+const TAB_TO_SEC = { personal: 'data', security: 'security', locations: 'locations', notifications: 'notifications' };
 
 export default function ProfilePage({ user, allLocations, onRefresh, section = 'data', onSection, onOpenArticle }) {
   const tab = SEC_TO_TAB[section] || 'personal';
@@ -23,6 +23,7 @@ export default function ProfilePage({ user, allLocations, onRefresh, section = '
     { key: 'personal', label: '📄 Особисті дані' },
     { key: 'security', label: '🔒 Безпека' },
     { key: 'locations', label: '📍 Мої локації' },
+    { key: 'notifications', label: '🔔 Сповіщення' },
   ];
 
   return (
@@ -47,13 +48,15 @@ export default function ProfilePage({ user, allLocations, onRefresh, section = '
         {tab === 'personal' && <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} onOpenArticle={onOpenArticle} />}
         {tab === 'security' && <SecuritySection user={user} onRefresh={onRefresh} />}
         {tab === 'locations' && <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />}
+        {tab === 'notifications' && <NotificationSettings />}
       </div>
 
-      {/* Desktop: усі три секції на сторінці */}
+      {/* Desktop: усі секції на сторінці */}
       <div className="hidden md:block space-y-12">
         <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} onOpenArticle={onOpenArticle} />
         <SecuritySection user={user} onRefresh={onRefresh} />
         <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />
+        <NotificationSettings />
       </div>
     </div>
   );
@@ -69,6 +72,12 @@ function PersonalSection({ user, allLocations, onRefresh, onOpenArticle }) {
   const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
+  const [birthday, setBirthday] = useState(null);
+  useEffect(() => {
+    let active = true;
+    apiGet('/api/users/me/birthday').then((d) => { if (active) setBirthday(d.birthday); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   // userCount з бекенду включає мене -> для моїх локацій мінус я сам.
   const locCount = (locId) => Math.max(0, (allLocations.find((l) => l.id === locId)?.userCount ?? 0) - 1);
@@ -155,6 +164,9 @@ function PersonalSection({ user, allLocations, onRefresh, onOpenArticle }) {
           <Labeled label="Телефон"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="inp" /></Labeled>
           <Labeled label="Бажана роль (read-only)"><input value={user.requestedRole ? roleName(user.requestedRole) : '—'} readOnly className="inp bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400" /></Labeled>
           <Labeled label="Ролі (read-only)"><input value={userRoles(user).map(roleName).join(', ') || '—'} readOnly className="inp bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400" /></Labeled>
+          <Labeled label="Дата народження (read-only)">
+            <input value={birthday ? new Date(birthday).toLocaleDateString('uk-UA') : '— зверніться до HR для зміни'} readOnly className="inp bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400" />
+          </Labeled>
         </div>
         <Banner error={error} success={success} />
         <button onClick={save} disabled={busy} className="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 disabled:opacity-60 text-white rounded-md text-sm">
@@ -420,6 +432,57 @@ function LocationsSection({ user, allLocations, onRefresh }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const PREF_LABELS = [
+  ['newArticleAll', 'Нові статті — всі'],
+  ['newArticleMyRole', 'Нові статті — моя роль'],
+  ['newArticleMyLocation', 'Нові статті — моя локація'],
+  ['comments', 'Коментарі до моїх статей'],
+  ['suggestions', 'Пропозиції до моїх статей'],
+  ['suggestionApproved', 'Прийняття моїх пропозицій'],
+  ['birthdays', 'Дні народження колег'],
+  ['digests', 'Дайджести компанії'],
+  ['roleChanges', 'Зміна моїх ролей'],
+  ['locationChanges', 'Зміна моїх локацій'],
+];
+
+function NotificationSettings() {
+  const [pref, setPref] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    apiGet('/api/users/me/notification-preferences')
+      .then((p) => { if (active) setPref(p); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const toggle = async (key) => {
+    const next = !pref[key];
+    setPref((p) => ({ ...p, [key]: next }));
+    apiPatch('/api/users/me/notification-preferences', { [key]: next }).catch(() => {});
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+        <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4">Сповіщення</h3>
+        {!pref ? (
+          <p className="text-sm text-stone-400 italic">Завантаження…</p>
+        ) : (
+          <div className="space-y-1" style={{ fontFamily: 'system-ui, sans-serif' }}>
+            {PREF_LABELS.map(([key, label]) => (
+              <label key={key} className="flex items-center justify-between gap-3 py-2 border-b border-stone-100 dark:border-stone-800 last:border-0 cursor-pointer min-h-[44px]">
+                <span className="text-sm text-stone-700 dark:text-stone-200">{label}</span>
+                <input type="checkbox" className="w-5 h-5 accent-rose-500" checked={!!pref[key]} onChange={() => toggle(key)} />
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

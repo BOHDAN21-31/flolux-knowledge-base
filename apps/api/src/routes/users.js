@@ -142,6 +142,41 @@ router.get('/me/bookmarks', requireAuth, wrap(async (req, res) => {
     })));
 }));
 
+// GET /api/users/me/birthday
+router.get('/me/birthday', requireAuth, wrap(async (req, res) => {
+  const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { birthday: true } });
+  res.json({ birthday: u?.birthday ? u.birthday.toISOString().slice(0, 10) : null });
+}));
+
+const PREF_FIELDS = [
+  'newArticleAll', 'newArticleMyRole', 'newArticleMyLocation', 'comments',
+  'suggestions', 'suggestionApproved', 'birthdays', 'digests', 'roleChanges', 'locationChanges',
+];
+
+// GET /api/users/me/notification-preferences (створює дефолт якщо немає)
+router.get('/me/notification-preferences', requireAuth, wrap(async (req, res) => {
+  const pref = await prisma.notificationPreference.upsert({
+    where: { userId: req.user.id },
+    update: {},
+    create: { userId: req.user.id },
+  });
+  res.json(pref);
+}));
+
+// PATCH /api/users/me/notification-preferences
+router.patch('/me/notification-preferences', requireAuth, wrap(async (req, res) => {
+  const data = {};
+  for (const f of PREF_FIELDS) {
+    if (req.body?.[f] !== undefined) data[f] = !!req.body[f];
+  }
+  const pref = await prisma.notificationPreference.upsert({
+    where: { userId: req.user.id },
+    update: data,
+    create: { userId: req.user.id, ...data },
+  });
+  res.json(pref);
+}));
+
 // GET /api/users/:id/activity — хронологічна стрічка дій користувача
 router.get('/:id/activity', requireAuth, wrap(async (req, res) => {
   const uid = req.params.id;

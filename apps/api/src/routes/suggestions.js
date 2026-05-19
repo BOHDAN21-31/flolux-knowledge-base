@@ -3,6 +3,7 @@ import { prisma } from '../db.js';
 import { requireAuth, requireAdmin } from '../auth.js';
 import { serializeSuggestion } from '../serialize.js';
 import { wrap, logAction } from '../lib.js';
+import { notifySuggestionApproved } from '../services/notifications.js';
 
 const router = Router();
 
@@ -78,6 +79,7 @@ router.patch('/:id', requireAuth, requireAdmin, wrap(async (req, res) => {
     include: { author: true, ratings: true },
   });
   await logAction(req.user.id, 'suggestion.' + status, 'suggestion', suggestion.id, { articleId: suggestion.articleId });
+  if (status === 'approved') await notifySuggestionApproved(suggestion, req.user.id);
   res.json(serializeSuggestion(suggestion, req.user.id));
 }));
 

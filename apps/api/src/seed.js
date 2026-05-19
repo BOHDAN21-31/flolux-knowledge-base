@@ -24,6 +24,16 @@ export async function seedTopics() {
   console.log(`[seed] створено ${rows.length} дефолтних топіків`);
 }
 
+// Спец-топіки, що мають існувати завжди (idempotent upsert, не лише на порожній БД).
+export async function seedSpecialTopics() {
+  await prisma.topic.upsert({
+    where: { id: 'hr-digests' },
+    update: {},
+    create: { id: 'hr-digests', roleKey: 'hr', title: 'Дайджести компанії', description: 'Загальнокорпоративні новини' },
+  });
+  console.log('[seed] спец-топік hr-digests синхронізовано');
+}
+
 const LOCATIONS = [
   // Київ
   { name: 'Бухгалтерія', slug: 'buhgalteriya', city: 'Київ', color: '#64748b' },

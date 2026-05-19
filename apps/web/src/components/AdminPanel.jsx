@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard, Users, MapPin, Inbox, BookOpen, MessageSquare, ScrollText,
-  Shield, Plus, Trash2, X, Search, ChevronRight, FileText,
+  Shield, Plus, Trash2, X, Search, ChevronRight, FileText, Cake, Megaphone,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api';
 import { useRoles } from '../RolesContext';
@@ -11,7 +11,7 @@ import Stars from '../Stars';
 
 const fmtDate = (ms) => new Date(ms).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' });
 
-const NAV = [
+const ADMIN_NAV = [
   { key: 'dashboard', label: 'Огляд', icon: LayoutDashboard },
   { key: 'users', label: 'Користувачі', icon: Users },
   { key: 'locations', label: 'Локації', icon: MapPin },
@@ -22,9 +22,14 @@ const NAV = [
   { key: 'moderation', label: 'Модерація', icon: MessageSquare },
   { key: 'audit', label: 'Журнал дій', icon: ScrollText },
 ];
+const HR_NAV = [
+  { key: 'birthdays', label: '🎂 Дні народження', icon: Cake },
+  { key: 'digests', label: '📢 Дайджести', icon: Megaphone },
+];
 
-export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, tab: tabProp, onTab }) {
-  const tab = tabProp || 'dashboard';
+export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, isAdmin = true, tab: tabProp, onTab }) {
+  const NAV = isAdmin ? [...ADMIN_NAV, ...HR_NAV] : HR_NAV;
+  const tab = tabProp || (isAdmin ? 'dashboard' : 'birthdays');
   const setTab = (t) => onTab?.(t);
 
   return (
@@ -76,6 +81,8 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
           {tab === 'roles' && <RolesTab />}
           {tab === 'moderation' && <ModerationTab articles={articles} />}
           {tab === 'audit' && <AuditTab />}
+          {tab === 'birthdays' && <BirthdaysTab />}
+          {tab === 'digests' && <DigestsTab />}
         </div>
       </div>
     </div>
@@ -1191,5 +1198,120 @@ function AuditTab() {
         </div>
       )}
     </Card>
+  );
+}
+
+// ============ 🎂 ДНІ НАРОДЖЕННЯ (HR/admin) ============
+function BirthdaysTab() {
+  const [users, setUsers] = useState([]);
+  const [q, setQ] = useState('');
+  const load = () => apiGet('/api/admin/birthday-list').then(setUsers).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const save = async (id, value) => {
+    try {
+      if (value) await apiPatch(`/api/admin/users/${id}/birthday`, { birthday: value });
+      else await apiDelete(`/api/admin/users/${id}/birthday`);
+      await load();
+    } catch (e) { alert(e.message); }
+  };
+
+  const filtered = users.filter((u) => !q || u.name.toLowerCase().includes(q.toLowerCase()));
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук користувача"
+            className="w-full pl-10 pr-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+        </div>
+      </Card>
+      <Card className="p-5 md:p-6">
+        <h3 className="text-lg text-stone-800 dark:text-stone-100 mb-4">Дні народження ({users.length})</h3>
+        <div className="space-y-1" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          {filtered.map((u) => (
+            <div key={u.id} className="flex items-center justify-between gap-3 py-2 border-b border-stone-100 dark:border-stone-800 last:border-0">
+              <span className="text-sm text-stone-800 dark:text-stone-100">{u.name}</span>
+              <div className="flex items-center gap-2">
+                <input type="date" defaultValue={u.birthday || ''} onChange={(e) => save(u.id, e.target.value)}
+                  className="px-2 min-h-[40px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+                {u.birthday && (
+                  <button onClick={() => save(u.id, null)} className="w-9 h-9 flex items-center justify-center text-stone-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                )}
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && <p className="text-sm text-stone-400 italic py-4 text-center">Нічого не знайдено</p>}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ============ 📢 ДАЙДЖЕСТИ (HR/admin) ============
+function DigestsTab() {
+  const [items, setItems] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ title: '', content: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = () => apiGet('/api/digests').then(setItems).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const create = async (asDraft) => {
+    if (!form.title.trim() || !form.content.trim()) { setError('Заповніть назву та зміст'); return; }
+    setBusy(true); setError('');
+    try {
+      await apiPost('/api/digests', { title: form.title, content: form.content, status: asDraft ? 'draft' : 'published' });
+      setForm({ title: '', content: '' });
+      setOpen(false);
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">Дайджести ({items.length})</h3>
+          <button onClick={() => setOpen(true)} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+            <Plus className="w-4 h-4" /> Створити дайджест
+          </button>
+        </div>
+        <div className="space-y-2">
+          {items.map((d) => (
+            <div key={d.id} className="flex items-center justify-between gap-3 p-3 border border-stone-200 dark:border-stone-700 rounded">
+              <span className="text-sm text-stone-800 dark:text-stone-100">{d.title}</span>
+              <span className="text-xs text-stone-400">{new Date(d.createdAt).toLocaleDateString('uk-UA')} · {d.status === 'draft' ? 'чернетка' : 'опубліковано'}</span>
+            </div>
+          ))}
+          {items.length === 0 && <p className="text-sm text-stone-400 italic py-4 text-center">Ще немає дайджестів</p>}
+        </div>
+      </Card>
+
+      {open && (
+        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
+          <div className="bg-white dark:bg-stone-900 w-full h-full sm:h-auto sm:max-w-2xl sm:max-h-[90vh] rounded-none sm:rounded-lg flex flex-col overflow-hidden" style={{ fontFamily: 'system-ui, sans-serif' }}>
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-200 dark:border-stone-700 sticky top-0 bg-white dark:bg-stone-900">
+              <h3 className="text-lg text-stone-800 dark:text-stone-100" style={{ fontFamily: 'Georgia, serif' }}>Новий дайджест</h3>
+              <button onClick={() => setOpen(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 sm:p-5 space-y-3 overflow-y-auto flex-1">
+              <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Заголовок дайджесту"
+                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+              <textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={12} placeholder="Текст (Markdown підтримується)"
+                className="w-full p-3 border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+              {error && <div className="p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
+            </div>
+            <div className="p-4 sm:p-5 border-t border-stone-200 dark:border-stone-700 flex gap-2 justify-end sticky bottom-0 bg-white dark:bg-stone-900">
+              <button onClick={() => create(true)} disabled={busy} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Зберегти чернетку</button>
+              <button onClick={() => create(false)} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">{busy ? 'Збереження…' : 'Опублікувати + оповістити'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

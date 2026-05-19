@@ -21,6 +21,7 @@ model User {
   // Авто-синхронізується до "первинної" ролі (admin або перша з roles).
   assignedRole  String?
   approved      Boolean      @default(false)
+  birthday      DateTime?    @db.Date
   createdAt     DateTime     @default(now())
   articles      Article[]
   comments      Comment[]
@@ -33,6 +34,44 @@ model User {
   auditLogs     AuditLog[]
   bookmarks     Bookmark[]
   views         ArticleView[]
+  notificationsReceived Notification[] @relation("notifRecipient")
+  notificationsSent     Notification[] @relation("notifActor")
+  notificationPref      NotificationPreference?
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  recipientId String
+  recipient   User      @relation("notifRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  body        String?
+  linkPath    String?
+  actorId     String?
+  actor       User?     @relation("notifActor", fields: [actorId], references: [id], onDelete: SetNull)
+  metadata    Json?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([recipientId, createdAt])
+  @@index([recipientId, readAt])
+}
+
+model NotificationPreference {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  newArticleAll        Boolean  @default(true)
+  newArticleMyRole     Boolean  @default(true)
+  newArticleMyLocation Boolean  @default(true)
+  comments             Boolean  @default(true)
+  suggestions          Boolean  @default(true)
+  suggestionApproved   Boolean  @default(true)
+  birthdays            Boolean  @default(true)
+  digests              Boolean  @default(true)
+  roleChanges          Boolean  @default(true)
+  locationChanges      Boolean  @default(true)
+  updatedAt            DateTime @default(now()) @updatedAt
 }
 
 model UserRole {
@@ -83,6 +122,9 @@ model Article {
   updatedAt   DateTime     @updatedAt
   status      String       @default("published")
   publishAt   DateTime?
+  notifyMode  String?
+  notifyTargets Json?
+  isDigest    Boolean      @default(false)
   comments    Comment[]
   suggestions Suggestion[]
   locations   ArticleLocation[]
@@ -92,6 +134,7 @@ model Article {
   @@index([topicId])
   @@index([status])
   @@index([publishAt])
+  @@index([isDigest])
 }
 
 model ArticleView {

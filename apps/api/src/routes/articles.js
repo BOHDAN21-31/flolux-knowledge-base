@@ -3,6 +3,9 @@ import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { serializeArticle, serializeComment, serializeSuggestion } from '../serialize.js';
 import { wrap, isAdmin, logAction, roleList, restrictedRoleKeys } from '../lib.js';
+import { notifyNewArticle, notifyComment, notifySuggestion } from '../services/notifications.js';
+
+const asJsonArray = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : undefined);
 
 const router = Router();
 
@@ -313,6 +316,8 @@ router.post('/', requireAuth, wrap(async (req, res) => {
   const mediaUrls = asStringArray(req.body?.mediaUrls) || [];
 
   const pub = normalizePublication(req.body);
+  const notifyMode = ['all', 'roles', 'locations'].includes(req.body?.notifyMode) ? req.body.notifyMode : null;
+  const notifyTargets = notifyMode === 'all' ? [] : (asJsonArray(req.body?.notifyTargets) || []);
   const article = await prisma.article.create({
     data: {
       topicId,
@@ -324,10 +329,16 @@ router.post('/', requireAuth, wrap(async (req, res) => {
       authorId: req.user.id,
       status: pub.status || 'published',
       publishAt: pub.publishAt ?? null,
+      notifyMode,
+      notifyTargets: notifyMode ? notifyTargets : undefined,
       locations: { create: locationIds.map((locationId) => ({ locationId })) },
     },
     include: articleInclude,
   });
+  // Сповіщення лише для одразу опублікованих (draft/scheduled — ні)
+  if ((article.status || 'published') === 'published' && article.notifyMode) {
+    await notifyNewArticle(article, req.user);
+  }
   res.json(serializeArticle(article));
 }));
 
@@ -351,6 +362,12 @@ router.patch('/:id', requireAuth, wrap(async (req, res) => {
     if (pub.publishAt !== undefined) data.publishAt = pub.publishAt;
   }
 
+  if (req.body?.notifyMode !== undefined) {
+    const nm = ['all', 'roles', 'locations'].includes(req.body.notifyMode) ? req.body.notifyMode : null;
+    data.notifyMode = nm;
+    data.notifyTargets = nm && nm !== 'all' ? (asJsonArray(req.body?.notifyTargets) || []) : (nm === 'all' ? [] : undefined);
+  }
+
   const locationIds = asStringArray(req.body?.locationIds);
   if (locationIds !== undefined) {
     data.locations = {
@@ -364,6 +381,14 @@ router.patch('/:id', requireAuth, wrap(async (req, res) => {
     data,
     include: articleInclude,
   });
+
+  // Перехід у published з draft/scheduled → оповістити
+  const wasLive = (existing.status || 'published') === 'published'
+    && (!existing.publishAt || new Date(existing.publishAt).getTime() <= Date.now());
+  const nowLive = (article.status || 'published') === 'published';
+  if (!wasLive && nowLive && article.notifyMode) {
+    await notifyNewArticle(article, req.user);
+  }
   res.json(serializeArticle(article));
 }));
 
@@ -391,6 +416,7 @@ router.post('/:id/comments', requireAuth, wrap(async (req, res) => {
     data: { articleId: req.params.id, authorId: req.user.id, content },
     include: { author: true },
   });
+  await notifyComment(article, req.user);
   res.json(serializeComment(comment));
 }));
 
@@ -404,6 +430,7 @@ router.post('/:id/suggestions', requireAuth, wrap(async (req, res) => {
     data: { articleId: req.params.id, authorId: req.user.id, content, status: 'pending' },
     include: { author: true },
   });
+  await notifySuggestion(article, req.user);
   res.json(serializeSuggestion(suggestion));
 }));
 

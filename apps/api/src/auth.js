@@ -55,3 +55,11 @@ export function requireAdmin(req, res, next) {
   }
   next();
 }
+
+export function requireHrOrAdmin(req, res, next) {
+  const roles = roleList(req.user || {});
+  if (!req.user || !(roles.includes('hr') || roles.includes('admin'))) {
+    return res.status(403).json({ error: 'Доступ лише для HR або адміністратора' });
+  }
+  next();
+}
