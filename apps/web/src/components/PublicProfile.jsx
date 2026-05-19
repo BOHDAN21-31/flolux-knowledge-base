@@ -3,8 +3,9 @@ import { ArrowLeft, User, Star, FileText, MessageSquare, Lightbulb } from 'lucid
 import { apiGet } from '../api';
 import { useRoles } from '../RolesContext';
 import { accountLevel } from '../level';
+import ActivityFeed from './ActivityFeed';
 
-export default function PublicProfile({ userId, currentUser, onBack, onEditProfile }) {
+export default function PublicProfile({ userId, currentUser, onBack, onEditProfile, onOpenArticle }) {
   const { roleName, roleChipStyle } = useRoles();
   const [data, setData] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | ok | error
@@ -82,6 +83,10 @@ export default function PublicProfile({ userId, currentUser, onBack, onEditProfi
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <ActivityFeed userId={userId} onOpenArticle={onOpenArticle} />
       </div>
     </div>
   );

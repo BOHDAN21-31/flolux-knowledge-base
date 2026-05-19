@@ -668,6 +668,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
 
   const [fRole, setFRole] = useState('');
   const [fLoc, setFLoc] = useState('');
+  const [fStatus, setFStatus] = useState('');
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(new Set());
   const [moveTopic, setMoveTopic] = useState('');
@@ -676,6 +677,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
   const filtered = articles.filter((a) => {
     if (fRole && topicRole(a) !== fRole) return false;
     if (fLoc && !(a.locations || []).some((l) => l.locationId === fLoc)) return false;
+    if (fStatus && (a.status || 'published') !== fStatus) return false;
     if (q && !(`${a.title} ${a.authorName || ''}`.toLowerCase().includes(q.toLowerCase()))) return false;
     return true;
   });
@@ -707,6 +709,12 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
         <select value={fLoc} onChange={(e) => setFLoc(e.target.value)} className="px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
           <option value="">Усі локації</option>
           {allLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} className="px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
+          <option value="">Усі статуси</option>
+          <option value="published">Опубліковані</option>
+          <option value="draft">Чернетки</option>
+          <option value="scheduled">Заплановані</option>
         </select>
         <button onClick={() => setPublishOpen(true)} className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm flex items-center gap-1">
           <Plus className="w-4 h-4" />Опублікувати статтю

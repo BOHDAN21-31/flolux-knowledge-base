@@ -28,6 +28,37 @@ async function approvedLocationIds(userId) {
   return links.map((l) => l.locationId);
 }
 
+// Видимість у загальних списках: НЕ чернетка і час публікації настав.
+// Чернетки/незаплановані не показуємо навіть автору в "Моя бібліотека"
+// (автор бачить їх окремо через ?status=draft та GET /:id).
+function statusVisibility() {
+  return {
+    AND: [
+      { status: { not: 'draft' } },
+      { OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] },
+    ],
+  };
+}
+
+// Нормалізація status/publishAt для POST/PATCH.
+function normalizePublication(body) {
+  const out = {};
+  const hasPublishAt = body?.publishAt !== undefined;
+  const pa = hasPublishAt && body.publishAt ? new Date(body.publishAt) : null;
+  const future = pa && !Number.isNaN(pa.getTime()) && pa.getTime() > Date.now();
+  if (body?.status === 'draft') {
+    out.status = 'draft';
+    out.publishAt = pa && !Number.isNaN(pa.getTime()) ? pa : null;
+  } else if (future) {
+    out.status = 'scheduled';
+    out.publishAt = pa;
+  } else if (body?.status !== undefined || hasPublishAt) {
+    out.status = 'published';
+    out.publishAt = null;
+  }
+  return out;
+}
+
 // GET /api/articles?topicId=X&roleKey=a,b&locationId=x,y&q=...&sort=new|old|az|rating
 router.get('/', requireAuth, wrap(async (req, res) => {
   const csv = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -56,6 +87,21 @@ router.get('/', requireAuth, wrap(async (req, res) => {
       ...(where.AND || []),
       { OR: [{ locations: { none: {} } }, { locations: { some: { locationId: { in: locIds } } } }] },
     ];
+  }
+
+  // Фільтрація за статусом публікації
+  const statusQ = String(req.query.status || '');
+  if (statusQ === 'draft') {
+    // лише власні чернетки
+    where.AND = [...(where.AND || []), { authorId: req.user.id, status: 'draft' }];
+  } else if (statusQ === 'scheduled') {
+    where.AND = [
+      ...(where.AND || []),
+      isAdmin(req.user) ? { status: 'scheduled' } : { status: 'scheduled', authorId: req.user.id },
+    ];
+  } else if (!isAdmin(req.user)) {
+    // звичайний список: опубліковані (час настав) або власні
+    where.AND = [...(where.AND || []), statusVisibility()];
   }
 
   const sort = String(req.query.sort || 'new');
@@ -89,6 +135,50 @@ router.get('/', requireAuth, wrap(async (req, res) => {
   res.json(out);
 }));
 
+// GET /api/articles/popular?limit=10 — топ за переглядами за 30 днів
+// (оголошено ДО /:id, інакше "popular" матчиться як :id)
+router.get('/popular', requireAuth, wrap(async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 10, 30);
+  const since = new Date(Date.now() - 30 * 864e5);
+  const grouped = await prisma.articleView.groupBy({
+    by: ['articleId'],
+    where: { viewedAt: { gte: since } },
+    _count: { _all: true },
+    orderBy: { _count: { articleId: 'desc' } },
+    take: 100,
+  });
+  const counts = Object.fromEntries(grouped.map((g) => [g.articleId, g._count._all]));
+  const ids = grouped.map((g) => g.articleId);
+  if (ids.length === 0) return res.json([]);
+
+  const where = { id: { in: ids } };
+  if (!isAdmin(req.user)) {
+    const locIds = await approvedLocationIds(req.user.id);
+    where.AND = [
+      { OR: [{ locations: { none: {} } }, { locations: { some: { locationId: { in: locIds } } } }] },
+      statusVisibility(),
+    ];
+  }
+  const articles = await prisma.article.findMany({
+    where,
+    include: { ...articleInclude, topic: { select: { roleKey: true } } },
+  });
+  let list = articles;
+  if (!isAdmin(req.user)) {
+    const restricted = await restrictedRoleKeys();
+    const mine = new Set(roleList(req.user));
+    list = articles.filter((a) => {
+      const rk = a.topic?.roleKey;
+      return !rk || !restricted.has(rk) || mine.has(rk);
+    });
+  }
+  const out = list
+    .map((a) => ({ ...serializeArticle(a), viewsCount: counts[a.id] || 0 }))
+    .sort((a, b) => b.viewsCount - a.viewsCount)
+    .slice(0, limit);
+  res.json(out);
+}));
+
 // GET /api/articles/:id — стаття з коментарями та пропозиціями
 router.get('/:id', requireAuth, wrap(async (req, res) => {
   const article = await prisma.article.findUnique({
@@ -102,7 +192,16 @@ router.get('/:id', requireAuth, wrap(async (req, res) => {
   });
   if (!article) return res.status(404).json({ error: 'Статтю не знайдено' });
 
-  if (!isAdmin(req.user)) {
+  const isAuthor = article.authorId === req.user.id;
+  const adminUser = isAdmin(req.user);
+  // Чернетку / незаплановану-ще бачить лише автор або admin
+  const notLive = article.status === 'draft'
+    || (article.publishAt && new Date(article.publishAt).getTime() > Date.now());
+  if (notLive && !isAuthor && !adminUser) {
+    return res.status(404).json({ error: 'Статтю не знайдено' });
+  }
+
+  if (!adminUser) {
     // Перевірка доступу за локаціями
     if (article.locations.length > 0) {
       const locIds = await approvedLocationIds(req.user.id);
@@ -128,12 +227,63 @@ router.get('/:id', requireAuth, wrap(async (req, res) => {
     where: { userId_articleId: { userId: req.user.id, articleId: article.id } },
   }));
 
+  const [viewsCount, myView] = await Promise.all([
+    prisma.articleView.count({ where: { articleId: article.id } }),
+    prisma.articleView.findUnique({
+      where: { articleId_userId: { articleId: article.id, userId: req.user.id } },
+    }),
+  ]);
+
+  // Список переглядачів — admin / автор / керівник локації статті
+  let canSeeViewers = adminUser || isAuthor;
+  if (!canSeeViewers && article.locations.length > 0) {
+    const mgr = await prisma.userLocation.findFirst({
+      where: {
+        userId: req.user.id,
+        isManager: true,
+        locationId: { in: article.locations.map((al) => al.locationId) },
+      },
+    });
+    canSeeViewers = !!mgr;
+  }
+  let viewers = [];
+  if (canSeeViewers) {
+    const rows = await prisma.articleView.findMany({
+      where: { articleId: article.id },
+      orderBy: { viewedAt: 'desc' },
+      take: 50,
+      include: { user: { select: { id: true, name: true, surname: true, avatarUrl: true } } },
+    });
+    viewers = rows.map((v) => ({
+      id: v.user.id,
+      name: `${v.user.name}${v.user.surname ? ' ' + v.user.surname : ''}`,
+      avatarUrl: v.user.avatarUrl || null,
+      viewedAt: v.viewedAt.getTime(),
+    }));
+  }
+
   res.json({
     ...serializeArticle(article),
     comments: article.comments.map(serializeComment),
     suggestions,
     bookmarked,
+    viewsCount,
+    viewedByMe: !!myView,
+    viewers,
   });
+}));
+
+// POST /api/articles/:id/view — фіксує унікальний перегляд
+router.post('/:id/view', requireAuth, wrap(async (req, res) => {
+  const article = await prisma.article.findUnique({ where: { id: req.params.id } });
+  if (!article) return res.status(404).json({ error: 'Статтю не знайдено' });
+  await prisma.articleView.upsert({
+    where: { articleId_userId: { articleId: req.params.id, userId: req.user.id } },
+    update: {},
+    create: { articleId: req.params.id, userId: req.user.id },
+  });
+  const viewsCount = await prisma.articleView.count({ where: { articleId: req.params.id } });
+  res.json({ ok: true, viewsCount });
 }));
 
 // POST /api/articles/:id/bookmark — toggle закладки
@@ -162,6 +312,7 @@ router.post('/', requireAuth, wrap(async (req, res) => {
   const locationIds = asStringArray(req.body?.locationIds) || [];
   const mediaUrls = asStringArray(req.body?.mediaUrls) || [];
 
+  const pub = normalizePublication(req.body);
   const article = await prisma.article.create({
     data: {
       topicId,
@@ -171,6 +322,8 @@ router.post('/', requireAuth, wrap(async (req, res) => {
       tags: normalizeTags(req.body.tags) || [],
       mediaUrls,
       authorId: req.user.id,
+      status: pub.status || 'published',
+      publishAt: pub.publishAt ?? null,
       locations: { create: locationIds.map((locationId) => ({ locationId })) },
     },
     include: articleInclude,
@@ -192,6 +345,11 @@ router.patch('/:id', requireAuth, wrap(async (req, res) => {
   if (tags !== undefined) data.tags = tags;
   const mediaUrls = asStringArray(req.body?.mediaUrls);
   if (mediaUrls !== undefined) data.mediaUrls = mediaUrls;
+  if (req.body?.status !== undefined || req.body?.publishAt !== undefined) {
+    const pub = normalizePublication(req.body);
+    if (pub.status !== undefined) data.status = pub.status;
+    if (pub.publishAt !== undefined) data.publishAt = pub.publishAt;
+  }
 
   const locationIds = asStringArray(req.body?.locationIds);
   if (locationIds !== undefined) {

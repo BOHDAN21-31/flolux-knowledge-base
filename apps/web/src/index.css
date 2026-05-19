@@ -6,6 +6,21 @@
 html.dark { color-scheme: dark; }
 html.dark body { background-color: #0c0a09; color: #e7e5e4; }
 
+/* Друк / "Зберегти як PDF" — лишаємо тільки контент статті */
+@media print {
+  html, body { background: #fff !important; color: #000 !important; }
+  header, nav, footer, .no-print { display: none !important; }
+  main { padding: 0 !important; max-width: 100% !important; }
+  .article-content {
+    border: none !important; box-shadow: none !important;
+    max-width: 100% !important; padding: 0 !important;
+    font-family: Georgia, serif;
+  }
+  .article-content img, .article-content video {
+    max-width: 100% !important; page-break-inside: avoid;
+  }
+}
+
 /* iOS зумить input при focus, якщо font-size < 16px — фіксуємо на мобільному */
 @media (max-width: 767px) {
   input,

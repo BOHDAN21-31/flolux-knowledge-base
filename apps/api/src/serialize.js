@@ -16,6 +16,8 @@ export const serializeArticle = (a) => ({
     name: al.location?.name,
     color: al.location?.color || null,
   })),
+  status: a.status || 'published',
+  publishAt: a.publishAt ? ms(a.publishAt) : null,
   author: a.authorId || 'system',
   authorRole: a.author?.assignedRole || 'tech',
   authorName: a.author?.name || 'Система',

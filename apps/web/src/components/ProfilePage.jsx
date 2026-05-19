@@ -5,6 +5,7 @@ import { userRoles } from '../roles';
 import { useRoles } from '../RolesContext';
 import { accountLevel } from '../level';
 import { useConfirm } from './ConfirmDialog';
+import ActivityFeed from './ActivityFeed';
 
 function Banner({ error, success }) {
   if (error) return <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded flex gap-2"><AlertCircle className="w-4 h-4 mt-0.5" />{error}</div>;
@@ -15,7 +16,7 @@ function Banner({ error, success }) {
 const SEC_TO_TAB = { data: 'personal', security: 'security', locations: 'locations' };
 const TAB_TO_SEC = { personal: 'data', security: 'security', locations: 'locations' };
 
-export default function ProfilePage({ user, allLocations, onRefresh, section = 'data', onSection }) {
+export default function ProfilePage({ user, allLocations, onRefresh, section = 'data', onSection, onOpenArticle }) {
   const tab = SEC_TO_TAB[section] || 'personal';
   const setTab = (k) => onSection?.(TAB_TO_SEC[k] || 'data');
   const tabs = [
@@ -43,14 +44,14 @@ export default function ProfilePage({ user, allLocations, onRefresh, section = '
 
       {/* Mobile: лише активна секція */}
       <div className="md:hidden">
-        {tab === 'personal' && <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} />}
+        {tab === 'personal' && <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} onOpenArticle={onOpenArticle} />}
         {tab === 'security' && <SecuritySection user={user} onRefresh={onRefresh} />}
         {tab === 'locations' && <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />}
       </div>
 
       {/* Desktop: усі три секції на сторінці */}
       <div className="hidden md:block space-y-12">
-        <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} />
+        <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} onOpenArticle={onOpenArticle} />
         <SecuritySection user={user} onRefresh={onRefresh} />
         <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />
       </div>
@@ -58,7 +59,7 @@ export default function ProfilePage({ user, allLocations, onRefresh, section = '
   );
 }
 
-function PersonalSection({ user, allLocations, onRefresh }) {
+function PersonalSection({ user, allLocations, onRefresh, onOpenArticle }) {
   const { roleName, roleChipStyle } = useRoles();
   const [form, setForm] = useState({
     name: user.name || '', surname: user.surname || '',
@@ -179,6 +180,8 @@ function PersonalSection({ user, allLocations, onRefresh }) {
           </div>
         )}
       </div>
+
+      <ActivityFeed userId={user.id} onOpenArticle={onOpenArticle} title="🕐 Моя активність" />
 
       <style>{`.inp{width:100%;padding:0.55rem 0.75rem;border:1px solid #e7e5e4;border-radius:0.375rem;outline:none}.inp:focus{border-color:#fb7185}`}</style>
     </div>

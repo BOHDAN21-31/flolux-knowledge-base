@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, createElement } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2, Sun, Moon, Bookmark } from 'lucide-react';
+import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2, Sun, Moon, Bookmark, FileText } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
 import PublicProfile from './components/PublicProfile';
@@ -232,6 +232,7 @@ function AppInner() {
         onRefresh={refreshMe}
         section={current.section || 'data'}
         onSection={(s) => reset({ type: 'profile', section: s })}
+        onOpenArticle={(id) => push({ type: 'article', articleId: id })}
       />
     );
   } else if (current.type === 'publicProfile') {
@@ -241,6 +242,7 @@ function AppInner() {
         currentUser={currentUser}
         onBack={back}
         onEditProfile={() => reset({ type: 'profile' })}
+        onOpenArticle={(id) => push({ type: 'article', articleId: id })}
       />
     );
   } else if (current.type === 'tech') {
@@ -717,13 +719,22 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
   const [results, setResults] = useState([]);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [bookmarks, setBookmarks] = useState([]);
+  const [drafts, setDrafts] = useState([]);
+  const [popular, setPopular] = useState([]);
   const recent = getRecent();
 
   useEffect(() => {
     let active = true;
-    apiGet('/api/users/me/bookmarks')
-      .then((b) => { if (active) setBookmarks(Array.isArray(b) ? b : []); })
-      .catch(() => {});
+    Promise.all([
+      apiGet('/api/users/me/bookmarks').catch(() => []),
+      apiGet('/api/articles?status=draft').catch(() => []),
+      apiGet('/api/articles/popular?limit=8').catch(() => []),
+    ]).then(([b, d, p]) => {
+      if (!active) return;
+      setBookmarks(Array.isArray(b) ? b : []);
+      setDrafts(Array.isArray(d) ? d : []);
+      setPopular(Array.isArray(p) ? p : []);
+    });
     return () => { active = false; };
   }, []);
 
@@ -940,6 +951,25 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
         </div>
       ) : (
         <>
+          {drafts.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-3">📝 Мої чернетки</h2>
+              <div className="flex gap-3 overflow-x-auto scroll-touch pb-1">
+                {drafts.map((d) => (
+                  <button key={d.id} onClick={() => onArticleClick({ id: d.id })}
+                    className="flex-shrink-0 w-64 text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 hover:border-rose-300 transition">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
+                        {d.status === 'scheduled' ? 'Заплановано' : 'Чернетка'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-2">{d.title}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {bookmarks.length > 0 && (
             <div className="mb-8">
               <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-3">📑 Мої закладки</h2>
@@ -964,6 +994,24 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
                     className="flex-shrink-0 w-56 text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 hover:border-rose-300 transition">
                     <div className="flex items-center gap-2 text-xs text-stone-400 mb-1"><Clock className="w-3 h-3" />{new Date(r.viewedAt).toLocaleDateString('uk-UA')}</div>
                     <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-2">{r.title}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {popular.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-3">🔥 Найпопулярніші</h2>
+              <div className="flex gap-3 overflow-x-auto scroll-touch pb-1 md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-visible">
+                {popular.map((p) => (
+                  <button key={p.id} onClick={() => onArticleClick({ id: p.id })}
+                    className="flex-shrink-0 w-64 md:w-auto text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 hover:border-rose-300 transition">
+                    <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-2 mb-1">{p.title}</div>
+                    <div className="flex items-center gap-2 text-xs text-stone-400">
+                      <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{p.viewsCount}</span>
+                      <span>· {new Date(p.createdAt).toLocaleDateString('uk-UA')}</span>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -1190,10 +1238,23 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
     setStatus('loading');
     let active = true;
     apiGet(`/api/articles/${articleId}`)
-      .then((a) => { if (active) { setArticle(a); setStatus('ok'); addRecent(a); } })
+      .then((a) => {
+        if (!active) return;
+        setArticle(a);
+        setStatus('ok');
+        addRecent(a);
+        // Фіксуємо унікальний перегляд (один раз на відкриття)
+        apiPost(`/api/articles/${articleId}/view`).catch(() => {});
+      })
       .catch((e) => { if (active) { console.error(e); setStatus('error'); } });
     return () => { active = false; };
   }, [articleId]);
+
+  const [showViewers, setShowViewers] = useState(false);
+  const publishNow = async () => {
+    await apiPatch(`/api/articles/${articleId}`, { status: 'published', publishAt: null });
+    await load();
+  };
 
   const toggleBookmark = async () => {
     try {
@@ -1257,7 +1318,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex items-center justify-between gap-3 mb-4 no-print flex-wrap">
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-100 min-h-[44px] transition">
           <ArrowLeft className="w-4 h-4" /> Повернутися
         </button>
@@ -1266,13 +1327,16 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
             <Bookmark className="w-4 h-4" fill={article.bookmarked ? 'currentColor' : 'none'} />
             <span className="hidden sm:inline">{article.bookmarked ? 'У закладках' : 'У закладки'}</span>
           </button>
+          <button onClick={() => window.print()} className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 hover:text-rose-600 min-h-[44px] px-2 transition" title="Завантажити PDF">
+            <FileText className="w-4 h-4" /> <span className="hidden sm:inline">Завантажити PDF</span>
+          </button>
           <button onClick={copyLink} className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 hover:text-rose-600 min-h-[44px] px-2 transition" title="Копіювати посилання">
             <Link2 className="w-4 h-4" /> <span className="hidden sm:inline">{copied ? 'Скопійовано' : 'Копіювати посилання'}</span>
           </button>
         </div>
       </div>
 
-      <article className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 md:p-8 mb-6">
+      <article className="article-content bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 md:p-8 mb-6">
         <>
             <div className="flex items-start justify-between gap-3 mb-4">
               <h1 className="text-2xl md:text-3xl text-stone-800 dark:text-stone-100">{article.title}</h1>
@@ -1305,6 +1369,47 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
                 </>
               )}
             </div>
+
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              {article.status === 'draft' && (
+                <span className="px-2 py-0.5 rounded-full text-xs bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">📝 Чернетка</span>
+              )}
+              {article.status === 'scheduled' && article.publishAt && (
+                <span className="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800 border border-amber-200">
+                  🕐 Запланована публікація: {new Date(article.publishAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}
+                </span>
+              )}
+              <span className="flex items-center gap-1 text-xs text-stone-500 dark:text-stone-400">
+                <Eye className="w-3.5 h-3.5" /> {article.viewsCount ?? 0} переглянули
+              </span>
+              {canEdit && article.status !== 'published' && (
+                <button onClick={publishNow} className="no-print px-3 py-1 rounded-full text-xs bg-rose-500 hover:bg-rose-600 text-white">
+                  Опублікувати зараз
+                </button>
+              )}
+            </div>
+
+            {(article.viewers || []).length > 0 && (
+              <div className="mb-4 no-print">
+                <button onClick={() => setShowViewers((v) => !v)} className="text-xs text-stone-500 dark:text-stone-400 hover:text-rose-600 flex items-center gap-1">
+                  <ChevronDown className={`w-3.5 h-3.5 transition ${showViewers ? 'rotate-180' : ''}`} /> Хто прочитав ({article.viewers.length})
+                </button>
+                {showViewers && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {article.viewers.map((v) => (
+                      <button key={v.id} onClick={() => onOpenUser?.(v.id)}
+                        className="flex items-center gap-2 px-2 py-1 rounded-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs text-stone-600 dark:text-stone-300">
+                        <span className="w-5 h-5 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden flex items-center justify-center">
+                          {v.avatarUrl ? <img src={v.avatarUrl} alt="" className="w-full h-full object-cover" /> : (v.name || '?')[0]}
+                        </span>
+                        {v.name}
+                        <span className="text-stone-400">· {new Date(v.viewedAt).toLocaleDateString('uk-UA')}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {article.locations && article.locations.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
@@ -1459,6 +1564,17 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
   const [locSearch, setLocSearch] = useState('');
   const mediaRef = useRef(null);
 
+  const toLocalInput = (ms) => {
+    if (!ms) return '';
+    const d = new Date(ms);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const [pubMode, setPubMode] = useState(
+    article?.status === 'draft' ? 'draft' : article?.status === 'scheduled' ? 'schedule' : 'now'
+  );
+  const [publishAt, setPublishAt] = useState(toLocalInput(article?.publishAt));
+
   const toggleLoc = (id) => setLocationIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   const cities = [...new Set(allLocations.map((l) => l.city).filter(Boolean))];
@@ -1491,6 +1607,10 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
       setError('Заповніть назву та зміст статті');
       return;
     }
+    if (pubMode === 'schedule' && !publishAt) {
+      setError('Вкажіть дату й час публікації');
+      return;
+    }
     setBusy(true);
     try {
       const payload = {
@@ -1499,6 +1619,8 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
         tags: form.tags,
         locationIds,
         mediaUrls: mediaUrls.map((m) => m.url),
+        status: pubMode === 'draft' ? 'draft' : 'published',
+        publishAt: pubMode === 'schedule' && publishAt ? new Date(publishAt).toISOString() : null,
       };
       if (isEdit) {
         await apiPatch(`/api/articles/${article.id}`, payload);
@@ -1608,13 +1730,32 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
             )}
           </div>
 
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Публікація</label>
+            <div className="flex flex-col gap-2 text-sm text-stone-700 dark:text-stone-200" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              <label className="flex items-center gap-2 min-h-[40px]">
+                <input type="radio" name="pub" checked={pubMode === 'now'} onChange={() => setPubMode('now')} /> Опублікувати зараз
+              </label>
+              <label className="flex items-center gap-2 min-h-[40px]">
+                <input type="radio" name="pub" checked={pubMode === 'draft'} onChange={() => setPubMode('draft')} /> Зберегти як чернетку
+              </label>
+              <label className="flex items-center gap-2 min-h-[40px]">
+                <input type="radio" name="pub" checked={pubMode === 'schedule'} onChange={() => setPubMode('schedule')} /> Запланувати
+              </label>
+              {pubMode === 'schedule' && (
+                <input type="datetime-local" value={publishAt} onChange={(e) => setPublishAt(e.target.value)}
+                  className="px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100 w-full sm:w-auto" />
+              )}
+            </div>
+          </div>
+
           {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
         </div>
 
         <div className="p-4 md:p-6 border-t border-stone-200 dark:border-stone-700 flex gap-2 justify-end sticky bottom-0 bg-white dark:bg-stone-900">
           <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Скасувати</button>
           <button onClick={handleSave} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
-            {busy ? 'Збереження...' : (isEdit ? 'Зберегти зміни' : 'Опублікувати')}
+            {busy ? 'Збереження...' : pubMode === 'draft' ? 'Зберегти чернетку' : pubMode === 'schedule' ? 'Запланувати' : (isEdit ? 'Зберегти зміни' : 'Опублікувати')}
           </button>
         </div>
       </div>

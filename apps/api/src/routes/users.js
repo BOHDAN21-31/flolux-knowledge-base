@@ -142,6 +142,50 @@ router.get('/me/bookmarks', requireAuth, wrap(async (req, res) => {
     })));
 }));
 
+// GET /api/users/:id/activity — хронологічна стрічка дій користувача
+router.get('/:id/activity', requireAuth, wrap(async (req, res) => {
+  const uid = req.params.id;
+  const [articles, comments, suggestions] = await Promise.all([
+    prisma.article.findMany({
+      where: { authorId: uid },
+      orderBy: { createdAt: 'desc' }, take: 10,
+      select: { id: true, title: true, createdAt: true },
+    }),
+    prisma.comment.findMany({
+      where: { authorId: uid },
+      orderBy: { createdAt: 'desc' }, take: 10,
+      select: { id: true, createdAt: true, article: { select: { id: true, title: true } } },
+    }),
+    prisma.suggestion.findMany({
+      where: { authorId: uid },
+      orderBy: { createdAt: 'desc' }, take: 10,
+      include: { ratings: true, article: { select: { id: true, title: true } } },
+    }),
+  ]);
+
+  const items = [
+    ...articles.map((a) => ({
+      type: 'article', at: a.createdAt.getTime(),
+      articleId: a.id, articleTitle: a.title,
+    })),
+    ...comments.filter((c) => c.article).map((c) => ({
+      type: 'comment', at: c.createdAt.getTime(),
+      articleId: c.article.id, articleTitle: c.article.title,
+    })),
+    ...suggestions.filter((s) => s.article).map((s) => {
+      const cnt = s.ratings.length;
+      const avg = cnt ? Math.round((s.ratings.reduce((x, r) => x + r.rating, 0) / cnt) * 10) / 10 : 0;
+      return {
+        type: 'suggestion', at: s.createdAt.getTime(),
+        articleId: s.article.id, articleTitle: s.article.title,
+        ratingAvg: avg, ratingCount: cnt,
+      };
+    }),
+  ].sort((a, b) => b.at - a.at).slice(0, 30);
+
+  res.json(items);
+}));
+
 // GET /api/users/:id/public — публічна картка користувача
 router.get('/:id/public', requireAuth, wrap(async (req, res) => {
   const u = await prisma.user.findUnique({
