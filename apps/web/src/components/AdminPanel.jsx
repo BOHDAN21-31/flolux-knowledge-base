@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard, Users, MapPin, Inbox, BookOpen, MessageSquare, ScrollText,
-  Shield, Plus, Trash2, X, Search, ChevronRight, FileText, Cake, Megaphone,
+  Shield, Plus, Trash2, X, Search, ChevronRight, FileText, Cake, Megaphone, Key,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api';
 import { useRoles } from '../RolesContext';
@@ -381,8 +381,32 @@ function UsersTab({ allLocations }) {
 
 function UserDetailModal({ id, onClose }) {
   const { roleName, roleChipStyle } = useRoles();
+  const confirm = useConfirm();
   const [u, setU] = useState(null);
+  const [rpOpen, setRpOpen] = useState(false);
+  const [rp, setRp] = useState({ a: '', b: '' });
+  const [rpErr, setRpErr] = useState('');
+  const [rpDone, setRpDone] = useState('');
+  const [rpCopied, setRpCopied] = useState(false);
   useEffect(() => { apiGet(`/api/admin/users/${id}`).then(setU).catch((e) => console.error(e)); }, [id]);
+
+  const resetPassword = async () => {
+    setRpErr('');
+    if (rp.a.length < 8) { setRpErr('Мінімум 8 символів'); return; }
+    if (rp.a !== rp.b) { setRpErr('Паролі не співпадають'); return; }
+    const ok = await confirm({
+      title: `Скинути пароль користувача ${u?.name || ''}?`,
+      description: 'Користувач не отримає сповіщення автоматично — повідомте йому новий пароль особисто.',
+      confirmLabel: 'Скинути', confirmVariant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await apiPost(`/api/admin/users/${id}/reset-password`, { newPassword: rp.a });
+      setRpDone(rp.a);
+      setRpOpen(false);
+      setRp({ a: '', b: '' });
+    } catch (e) { setRpErr(e.message); }
+  };
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch md:items-center justify-center md:p-4" onClick={onClose}>
@@ -424,6 +448,39 @@ function UserDetailModal({ id, onClose }) {
                 ))}
                 {(u.articles || []).length === 0 && <span className="text-xs text-stone-400 italic">немає</span>}
               </div>
+            </div>
+
+            <div className="pt-3 border-t border-stone-100 dark:border-stone-800">
+              <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-2">Безпека</div>
+              {rpDone ? (
+                <div className="p-3 rounded-md bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+                  <div className="text-sm text-stone-700 dark:text-stone-200 mb-1">Пароль скинуто. Передайте користувачу особисто:</div>
+                  <div className="flex items-center gap-2">
+                    <code className="text-lg px-3 py-1 rounded bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">{rpDone}</code>
+                    <button onClick={() => { navigator.clipboard.writeText(rpDone).then(() => { setRpCopied(true); setTimeout(() => setRpCopied(false), 1500); }); }}
+                      className="px-3 min-h-[40px] rounded text-sm border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300">
+                      {rpCopied ? 'Скопійовано' : 'Скопіювати'}
+                    </button>
+                  </div>
+                </div>
+              ) : !rpOpen ? (
+                <button onClick={() => { setRpOpen(true); setRpErr(''); }}
+                  className="flex items-center gap-1.5 px-3 min-h-[44px] rounded-md text-sm bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:text-rose-600">
+                  <Key className="w-4 h-4" /> Скинути пароль
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <input type="password" value={rp.a} onChange={(e) => setRp({ ...rp, a: e.target.value })} placeholder="Новий пароль (мін. 8)"
+                    className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+                  <input type="password" value={rp.b} onChange={(e) => setRp({ ...rp, b: e.target.value })} placeholder="Повторіть пароль"
+                    className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+                  {rpErr && <div className="text-sm text-rose-600">{rpErr}</div>}
+                  <div className="flex gap-2">
+                    <button onClick={() => { setRpOpen(false); setRp({ a: '', b: '' }); setRpErr(''); }} className="px-4 min-h-[44px] rounded-md text-sm bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200">Скасувати</button>
+                    <button onClick={resetPassword} className="px-4 min-h-[44px] rounded-md text-sm bg-red-600 hover:bg-red-700 text-white">Скинути</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

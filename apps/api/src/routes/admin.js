@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { publicUser, requireAuth, requireAdmin, requireHrOrAdmin } from '../auth.js';
 import { wrap, logAction, syncPrimaryRole, slugify, roleExists } from '../lib.js';
@@ -175,6 +176,22 @@ router.delete('/users/:id', wrap(async (req, res) => {
   }
   await prisma.user.delete({ where: { id: req.params.id } });
   await logAction(req.user.id, 'user.deleted', 'user', req.params.id, { email: target.email });
+  res.json({ ok: true });
+}));
+
+// POST /api/admin/users/:id/reset-password — лише admin (під глобальним requireAdmin)
+router.post('/users/:id/reset-password', wrap(async (req, res) => {
+  const newPassword = String(req.body?.newPassword || '');
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'Пароль має містити мінімум 8 символів' });
+  }
+  const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true } });
+  if (!target) return res.status(404).json({ error: 'Користувача не знайдено' });
+  await prisma.user.update({
+    where: { id: req.params.id },
+    data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+  });
+  await logAction(req.user.id, 'user.password_reset', 'user', req.params.id, {});
   res.json({ ok: true });
 }));
 

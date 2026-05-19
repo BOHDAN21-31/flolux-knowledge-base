@@ -177,6 +177,38 @@ router.get('/popular', requireAuth, wrap(async (req, res) => {
   res.json(out);
 }));
 
+// GET /api/articles/by-ids?ids=a,b,c — лише існуючі й доступні (для очищення recent)
+// (оголошено ДО /:id)
+router.get('/by-ids', requireAuth, wrap(async (req, res) => {
+  const ids = String(req.query.ids || '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 50);
+  if (ids.length === 0) return res.json([]);
+  const articles = await prisma.article.findMany({
+    where: { id: { in: ids } },
+    include: { ...articleInclude, topic: { select: { roleKey: true } } },
+  });
+  const admin = isAdmin(req.user);
+  let locIds = [];
+  let restricted = new Set();
+  let mine = new Set();
+  if (!admin) {
+    locIds = await approvedLocationIds(req.user.id);
+    restricted = await restrictedRoleKeys();
+    mine = new Set(roleList(req.user));
+  }
+  const now = Date.now();
+  const visible = articles.filter((a) => {
+    if (admin) return true;
+    const isAuthor = a.authorId === req.user.id;
+    const live = a.status === 'published' && (!a.publishAt || new Date(a.publishAt).getTime() <= now);
+    if (!live && !isAuthor) return false;
+    if (a.locations.length > 0 && !a.locations.some((al) => locIds.includes(al.locationId)) && !isAuthor) return false;
+    const rk = a.topic?.roleKey;
+    if (rk && restricted.has(rk) && !mine.has(rk) && !isAuthor) return false;
+    return true;
+  });
+  res.json(visible.map(serializeArticle));
+}));
+
 // GET /api/articles/:id — стаття з коментарями та пропозиціями
 router.get('/:id', requireAuth, wrap(async (req, res) => {
   const article = await prisma.article.findUnique({

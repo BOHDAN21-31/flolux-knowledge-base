@@ -16,7 +16,7 @@ import { RolesProvider, useRoles } from './RolesContext';
 import { iconFor } from './icons';
 import { useTheme } from './theme';
 import { renderMarkdown } from './markdown';
-import { getRecent, addRecent } from './recent';
+import { getRecent, addRecent, removeRecent, pruneRecent } from './recent';
 
 // ── Навігаційний стек ⇄ URL ──
 function pathForFrame(f) {
@@ -759,26 +759,30 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
   const [bdToday, setBdToday] = useState([]);
   const [bdSoon, setBdSoon] = useState([]);
   const [digests, setDigests] = useState([]);
-  const recent = getRecent();
+  const [recent, setRecent] = useState(getRecent());
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      apiGet('/api/users/me/bookmarks').catch(() => []),
-      apiGet('/api/articles?status=draft').catch(() => []),
-      apiGet('/api/articles/popular?limit=8').catch(() => []),
-      apiGet('/api/birthdays/today').catch(() => []),
-      apiGet('/api/birthdays/upcoming?days=7').catch(() => []),
-      apiGet('/api/digests').catch(() => []),
-    ]).then(([b, d, p, bt, bs, dg]) => {
-      if (!active) return;
-      setBookmarks(Array.isArray(b) ? b : []);
-      setDrafts(Array.isArray(d) ? d : []);
-      setPopular(Array.isArray(p) ? p : []);
-      setBdToday(Array.isArray(bt) ? bt : []);
-      setBdSoon(Array.isArray(bs) ? bs.filter((x) => x.inDays > 0) : []);
-      setDigests(Array.isArray(dg) ? dg : []);
-    });
+    // Один запит замість 5–6
+    apiGet('/api/users/me/home-data').then((d) => {
+      if (!active || !d) return;
+      setBookmarks(Array.isArray(d.bookmarks) ? d.bookmarks : []);
+      setDrafts(Array.isArray(d.drafts) ? d.drafts : []);
+      setPopular(Array.isArray(d.popular) ? d.popular : []);
+      setBdToday(Array.isArray(d.birthdaysToday) ? d.birthdaysToday : []);
+      setBdSoon(Array.isArray(d.birthdaysUpcoming) ? d.birthdaysUpcoming : []);
+      setDigests(Array.isArray(d.digests) ? d.digests : []);
+    }).catch(() => {});
+
+    // Recent: перевіряємо існування й доступність, чистимо localStorage від мертвих id
+    const recentIds = getRecent().map((r) => r.articleId);
+    if (recentIds.length) {
+      apiGet(`/api/articles/by-ids?ids=${recentIds.join(',')}`).then((arts) => {
+        if (!active) return;
+        const valid = (Array.isArray(arts) ? arts : []).map((a) => a.id);
+        setRecent(pruneRecent(valid));
+      }).catch(() => {});
+    }
     return () => { active = false; };
   }, []);
 
@@ -1368,6 +1372,8 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
     if (!ok) return;
     try {
       await apiDelete(`/api/articles/${articleId}`);
+      removeRecent(articleId);
+      if (onArticleUpdated) onArticleUpdated();
       onBack();
     } catch (e) { alert(e.message); }
   };
@@ -1554,7 +1560,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
                 {article.mediaUrls.map((url) => (
                   /\.(mp4|mov|webm)$/i.test(url)
                     ? <video key={url} src={url} controls playsInline preload="metadata" className="w-full rounded-lg border border-stone-200 dark:border-stone-700" />
-                    : <img key={url} src={url} alt="" className="w-full rounded-lg border border-stone-200 dark:border-stone-700 object-cover" />
+                    : <img key={url} src={url} alt="" loading="lazy" className="w-full rounded-lg border border-stone-200 dark:border-stone-700 object-cover" />
                 ))}
               </div>
             )}
@@ -1726,7 +1732,7 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
     try {
       for (const f of files) {
         const up = await apiUpload(f, (pct) => setUpPct(pct));
-        setMediaUrls((prev) => [...prev, { url: up.url, type: up.type }]);
+        setMediaUrls((prev) => [...prev, { url: up.url, type: up.type, thumbnailUrl: up.thumbnailUrl || null }]);
       }
     } catch (err) {
       setError(err.message);
@@ -1857,7 +1863,7 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
                   <div key={m.url} className="relative group">
                     {m.type === 'video'
                       ? <video src={m.url} playsInline preload="metadata" className="w-full h-24 object-cover rounded" />
-                      : <img src={m.url} alt="" className="w-full h-24 object-cover rounded" />}
+                      : <img src={m.thumbnailUrl || m.url} alt="" loading="lazy" className="w-full h-24 object-cover rounded" />}
                     <button type="button" onClick={() => setMediaUrls((prev) => prev.filter((_, j) => j !== i))}
                       className="absolute top-1 right-1 bg-stone-900/70 text-white rounded-full w-7 h-7 flex items-center justify-center md:opacity-0 md:group-hover:opacity-100 transition">
                       <X className="w-3 h-3" />

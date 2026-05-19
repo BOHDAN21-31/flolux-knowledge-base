@@ -3,7 +3,8 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { requireAuth, publicUser } from '../auth.js';
-import { wrap, logAction, roleList } from '../lib.js';
+import { wrap, logAction, roleList, isAdmin, restrictedRoleKeys } from '../lib.js';
+import { serializeArticle } from '../serialize.js';
 
 const router = Router();
 
@@ -275,6 +276,94 @@ router.get('/:id/public', requireAuth, wrap(async (req, res) => {
     articlesCount,
     commentsCount,
     suggestionsCount,
+  });
+}));
+
+// GET /api/users/me/home-data — один запит замість 5–6 для HomeView
+router.get('/me/home-data', requireAuth, wrap(async (req, res) => {
+  const uid = req.user.id;
+  const admin = isAdmin(req.user);
+  const now = new Date();
+  const inc = { author: true, locations: { include: { location: true } } };
+
+  const [draftRows, bookmarkRows, digestRows, bdUsers, viewGroups] = await Promise.all([
+    prisma.article.findMany({
+      where: { authorId: uid, status: 'draft' },
+      orderBy: { createdAt: 'desc' }, take: 12,
+      select: { id: true, title: true, createdAt: true },
+    }),
+    prisma.bookmark.findMany({
+      where: { userId: uid }, orderBy: { createdAt: 'desc' }, take: 12,
+      include: { article: { select: { id: true, title: true, content: true, createdAt: true } } },
+    }),
+    prisma.article.findMany({
+      where: admin ? { isDigest: true } : { isDigest: true, status: 'published', OR: [{ publishAt: null }, { publishAt: { lte: now } }] },
+      orderBy: { createdAt: 'desc' }, take: 4, include: inc,
+    }),
+    prisma.user.findMany({
+      where: { birthday: { not: null } },
+      select: { id: true, name: true, surname: true, avatarUrl: true, birthday: true },
+    }),
+    prisma.articleView.groupBy({
+      by: ['articleId'], where: { viewedAt: { gte: new Date(Date.now() - 30 * 864e5) } },
+      _count: { _all: true }, orderBy: { _count: { articleId: 'desc' } }, take: 60,
+    }),
+  ]);
+
+  // Найпопулярніші — з повагою до прав
+  const counts = Object.fromEntries(viewGroups.map((g) => [g.articleId, g._count._all]));
+  let popular = [];
+  if (viewGroups.length) {
+    const where = { id: { in: viewGroups.map((g) => g.articleId) } };
+    if (!admin) {
+      const links = await prisma.userLocation.findMany({ where: { userId: uid, approved: true }, select: { locationId: true } });
+      const locIds = links.map((l) => l.locationId);
+      where.AND = [
+        { OR: [{ locations: { none: {} } }, { locations: { some: { locationId: { in: locIds } } } }] },
+        { status: 'published', OR: [{ publishAt: null }, { publishAt: { lte: now } }] },
+      ];
+    }
+    const arts = await prisma.article.findMany({ where, include: { ...inc, topic: { select: { roleKey: true } } } });
+    let list = arts;
+    if (!admin) {
+      const restricted = await restrictedRoleKeys();
+      const mine = new Set(roleList(req.user));
+      list = arts.filter((a) => { const rk = a.topic?.roleKey; return !rk || !restricted.has(rk) || mine.has(rk); });
+    }
+    popular = list
+      .map((a) => ({ ...serializeArticle(a), viewsCount: counts[a.id] || 0 }))
+      .sort((a, b) => b.viewsCount - a.viewsCount).slice(0, 8);
+  }
+
+  const m = now.getMonth();
+  const d = now.getDate();
+  const bdCard = (u, extra = {}) => ({
+    id: u.id, name: `${u.name}${u.surname ? ' ' + u.surname : ''}`,
+    avatarUrl: u.avatarUrl || null, ...extra,
+  });
+  const birthdaysToday = bdUsers.filter((u) => {
+    const b = new Date(u.birthday); return b.getMonth() === m && b.getDate() === d;
+  }).map((u) => bdCard(u));
+  const startToday = new Date(now.getFullYear(), m, d);
+  const birthdaysUpcoming = bdUsers.map((u) => {
+    const b = new Date(u.birthday);
+    let next = new Date(now.getFullYear(), b.getMonth(), b.getDate());
+    if (next < startToday) next = new Date(now.getFullYear() + 1, b.getMonth(), b.getDate());
+    return { u, diff: Math.round((next - startToday) / 864e5) };
+  }).filter((x) => x.diff > 0 && x.diff <= 7).sort((a, b) => a.diff - b.diff)
+    .map((x) => bdCard(x.u, { inDays: x.diff }));
+
+  res.json({
+    drafts: draftRows.map((a) => ({ id: a.id, title: a.title, status: 'draft', createdAt: a.createdAt.getTime() })),
+    bookmarks: bookmarkRows.filter((b) => b.article).map((b) => ({
+      id: b.article.id, title: b.article.title,
+      excerpt: String(b.article.content || '').replace(/[*#>`]/g, '').slice(0, 140),
+      createdAt: b.article.createdAt.getTime(),
+    })),
+    popular,
+    digests: digestRows.map(serializeArticle),
+    birthdaysToday,
+    birthdaysUpcoming,
   });
 }));
 

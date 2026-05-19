@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
@@ -27,6 +28,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+app.use(compression());
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 

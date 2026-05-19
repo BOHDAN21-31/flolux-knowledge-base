@@ -19,3 +19,21 @@ export function addRecent(article) {
     localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX)));
   } catch { /* ignore */ }
 }
+
+export function removeRecent(articleId) {
+  if (!articleId) return;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(getRecent().filter((r) => r.articleId !== articleId)));
+  } catch { /* ignore */ }
+}
+
+// Лишити лише валідні id (для авто-очищення після перевірки на бекенді).
+export function pruneRecent(validIds) {
+  try {
+    const valid = new Set(validIds);
+    const cur = getRecent();
+    const next = cur.filter((r) => valid.has(r.articleId));
+    if (next.length !== cur.length) localStorage.setItem(KEY, JSON.stringify(next));
+    return next;
+  } catch { return getRecent(); }
+}

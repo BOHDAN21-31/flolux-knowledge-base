@@ -5,6 +5,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import { fileTypeFromBuffer } from 'file-type';
 import { requireAuth } from '../auth.js';
+import { processImage } from '../services/image-processor.js';
 
 const router = Router();
 
@@ -64,12 +65,22 @@ router.post('/', requireAuth, upload.single('file'), async (req, res) => {
     }
 
     const filename = `${uuidv4()}.${allowed.ext}`;
-    await fs.promises.writeFile(path.join(UPLOAD_DIR, filename), buf);
+    const fullPath = path.join(UPLOAD_DIR, filename);
+    await fs.promises.writeFile(fullPath, buf);
+
+    // Оптимізація+thumbnail для зображень (для відео — пропускається)
+    let meta = null;
+    if (allowed.kind === 'image') {
+      meta = await processImage(fullPath, resolvedMime);
+    }
+    let outSize = buf.length;
+    try { outSize = (await fs.promises.stat(fullPath)).size; } catch { /* keep */ }
 
     res.json({
       url: `/uploads/${filename}`,
+      thumbnailUrl: meta?.thumbnailUrl || null,
       type: allowed.kind,
-      size: buf.length,
+      size: outSize,
       mime: resolvedMime,
     });
   } catch (e) {
