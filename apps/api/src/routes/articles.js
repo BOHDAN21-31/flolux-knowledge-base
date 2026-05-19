@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { serializeArticle, serializeComment, serializeSuggestion } from '../serialize.js';
-import { wrap, isAdmin, logAction } from '../lib.js';
+import { wrap, isAdmin, logAction, roleList, restrictedRoleKeys } from '../lib.js';
 
 const router = Router();
 
@@ -28,25 +28,65 @@ async function approvedLocationIds(userId) {
   return links.map((l) => l.locationId);
 }
 
-// GET /api/articles?topicId=X — фільтр за локаціями користувача (admin бачить усе)
+// GET /api/articles?topicId=X&roleKey=a,b&locationId=x,y&q=...&sort=new|old|az|rating
 router.get('/', requireAuth, wrap(async (req, res) => {
+  const csv = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
   const where = {};
   if (req.query.topicId) where.topicId = String(req.query.topicId);
 
-  if (!isAdmin(req.user)) {
-    const locIds = await approvedLocationIds(req.user.id);
+  const roleKeyFilter = csv(req.query.roleKey);
+  if (roleKeyFilter.length) where.topic = { roleKey: { in: roleKeyFilter } };
+
+  const locFilter = csv(req.query.locationId);
+  if (locFilter.length) where.locations = { some: { locationId: { in: locFilter } } };
+
+  const q = String(req.query.q || '').trim();
+  if (q) {
     where.OR = [
-      { locations: { none: {} } }, // глобальна стаття
-      { locations: { some: { locationId: { in: locIds } } } },
+      { title: { contains: q, mode: 'insensitive' } },
+      { content: { contains: q, mode: 'insensitive' } },
+      { tags: { has: q } },
     ];
   }
 
+  // Контроль доступу за локаціями (admin бачить усе). AND із фільтрами вище.
+  if (!isAdmin(req.user)) {
+    const locIds = await approvedLocationIds(req.user.id);
+    where.AND = [
+      ...(where.AND || []),
+      { OR: [{ locations: { none: {} } }, { locations: { some: { locationId: { in: locIds } } } }] },
+    ];
+  }
+
+  const sort = String(req.query.sort || 'new');
+  const orderBy = sort === 'old' ? { createdAt: 'asc' }
+    : sort === 'az' ? { title: 'asc' }
+    : { createdAt: 'desc' }; // 'new' (default) і 'rating' (досорт нижче)
+
   const articles = await prisma.article.findMany({
     where,
-    include: articleInclude,
-    orderBy: { createdAt: 'desc' },
+    include: {
+      ...articleInclude,
+      topic: { select: { roleKey: true } },
+      suggestions: { select: { ratings: { select: { rating: true } } } },
+    },
+    orderBy,
   });
-  res.json(articles.map(serializeArticle));
+
+  // P6: приховати статті обмежених ролей від тих, кому роль не призначена
+  let list = articles;
+  if (!isAdmin(req.user)) {
+    const restricted = await restrictedRoleKeys();
+    const mine = new Set(roleList(req.user));
+    list = articles.filter((a) => {
+      const rk = a.topic?.roleKey;
+      return !rk || !restricted.has(rk) || mine.has(rk);
+    });
+  }
+
+  let out = list.map(serializeArticle);
+  if (sort === 'rating') out = out.sort((a, b) => (b.ratingAvg || 0) - (a.ratingAvg || 0) || b.createdAt - a.createdAt);
+  res.json(out);
 }));
 
 // GET /api/articles/:id — стаття з коментарями та пропозиціями
@@ -55,17 +95,28 @@ router.get('/:id', requireAuth, wrap(async (req, res) => {
     where: { id: req.params.id },
     include: {
       ...articleInclude,
+      topic: { select: { roleKey: true } },
       comments: { include: { author: true }, orderBy: { createdAt: 'asc' } },
       suggestions: { include: { author: true, ratings: true }, orderBy: { createdAt: 'desc' } },
     },
   });
   if (!article) return res.status(404).json({ error: 'Статтю не знайдено' });
 
-  // Перевірка доступу за локаціями (admin — завжди)
-  if (!isAdmin(req.user) && article.locations.length > 0) {
-    const locIds = await approvedLocationIds(req.user.id);
-    const visible = article.locations.some((al) => locIds.includes(al.locationId));
-    if (!visible) return res.status(403).json({ error: 'Стаття недоступна для ваших локацій' });
+  if (!isAdmin(req.user)) {
+    // Перевірка доступу за локаціями
+    if (article.locations.length > 0) {
+      const locIds = await approvedLocationIds(req.user.id);
+      const visible = article.locations.some((al) => locIds.includes(al.locationId));
+      if (!visible) return res.status(403).json({ error: 'Стаття недоступна для ваших локацій' });
+    }
+    // P6: обмежена роль — лише явно призначеним
+    const rk = article.topic?.roleKey;
+    if (rk) {
+      const restricted = await restrictedRoleKeys();
+      if (restricted.has(rk) && !roleList(req.user).includes(rk)) {
+        return res.status(403).json({ error: 'Стаття доступна лише для відповідної ролі' });
+      }
+    }
   }
 
   // Сортування пропозицій: за рейтингом desc -> за датою desc

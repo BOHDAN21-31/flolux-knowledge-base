@@ -26,6 +26,16 @@ export const roleList = (u) =>
 // admin, якщо є роль 'admin' АБО (зворотна сумісність) assignedRole === 'admin'.
 export const isAdmin = (u) => roleList(u).includes('admin') || u?.assignedRole === 'admin';
 
+// Чи існує роль із таким ключем (валідація замість хардкоду ROLE_KEYS).
+export const roleExists = async (key) =>
+  !!key && !!(await prisma.role.findUnique({ where: { key: String(key) } }));
+
+// Множина ключів обмежених (restricted) ролей.
+export async function restrictedRoleKeys() {
+  const rs = await prisma.role.findMany({ where: { restricted: true }, select: { key: true } });
+  return new Set(rs.map((r) => r.key));
+}
+
 // Перерахунок "первинної" ролі у застарілий assignedRole:
 // admin (якщо є) -> інакше найперша за датою роль -> інакше null.
 export async function syncPrimaryRole(userId) {

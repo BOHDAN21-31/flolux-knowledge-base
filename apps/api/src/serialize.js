@@ -19,6 +19,11 @@ export const serializeArticle = (a) => ({
   author: a.authorId || 'system',
   authorRole: a.author?.assignedRole || 'tech',
   authorName: a.author?.name || 'Система',
+  // Середній рейтинг усіх пропозицій до статті (для сортування бібліотеки)
+  ratingAvg: (() => {
+    const rs = (a.suggestions || []).flatMap((s) => s.ratings || []);
+    return rs.length ? Math.round((rs.reduce((x, r) => x + r.rating, 0) / rs.length) * 10) / 10 : 0;
+  })(),
   createdAt: ms(a.createdAt),
   updatedAt: ms(a.updatedAt),
 });

@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { publicUser, requireAuth, requireAdmin } from '../auth.js';
-import { ROLE_KEYS } from '../constants.js';
-import { wrap, logAction, syncPrimaryRole, slugify } from '../lib.js';
+import { wrap, logAction, syncPrimaryRole, slugify, roleExists } from '../lib.js';
 import { serializeLocation } from './locations.js';
+import { serializeRole } from './roles.js';
 
 const router = Router();
 
@@ -54,7 +54,7 @@ router.get('/users/:id', wrap(async (req, res) => {
 router.patch('/users/:id', wrap(async (req, res) => {
   const { assignedRole, approved } = req.body || {};
   if (assignedRole !== undefined) {
-    if (assignedRole !== null && !ROLE_KEYS.includes(assignedRole)) {
+    if (assignedRole !== null && !(await roleExists(assignedRole))) {
       return res.status(400).json({ error: 'Невідома роль' });
     }
     await prisma.userRole.deleteMany({ where: { userId: req.params.id } });
@@ -74,7 +74,7 @@ router.patch('/users/:id', wrap(async (req, res) => {
 // POST /api/admin/users/:id/roles { role }
 router.post('/users/:id/roles', wrap(async (req, res) => {
   const { role } = req.body || {};
-  if (!ROLE_KEYS.includes(role)) return res.status(400).json({ error: 'Невідома роль' });
+  if (!(await roleExists(role))) return res.status(400).json({ error: 'Невідома роль' });
   const user = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!user) return res.status(404).json({ error: 'Користувача не знайдено' });
 
@@ -377,6 +377,72 @@ router.delete('/locations/:id', wrap(async (req, res) => {
   }
   await prisma.location.delete({ where: { id: req.params.id } });
   await logAction(req.user.id, 'location.deleted', 'location', req.params.id);
+  res.json({ ok: true });
+}));
+
+// ===== Ролі (admin CRUD) =====
+
+const roleKeyFrom = (s) => {
+  const k = String(s || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+  return k || `role_${Date.now()}`;
+};
+
+// POST /api/admin/roles { key?, name, description, iconKey, color, restricted }
+router.post('/roles', wrap(async (req, res) => {
+  const { name, description, iconKey, color, restricted } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Вкажіть назву ролі' });
+  const key = req.body?.key ? roleKeyFrom(req.body.key) : roleKeyFrom(name);
+  if (await prisma.role.findUnique({ where: { key } })) {
+    return res.status(400).json({ error: 'Роль із таким ключем уже існує' });
+  }
+  const role = await prisma.role.create({
+    data: {
+      key,
+      name: String(name).trim(),
+      description: description || null,
+      iconKey: iconKey || null,
+      color: color || null,
+      restricted: !!restricted,
+      protected: false,
+    },
+  });
+  await logAction(req.user.id, 'role.created', 'role', role.key, { name: role.name });
+  res.json(serializeRole(role));
+}));
+
+// PATCH /api/admin/roles/:key { name, description, iconKey, color, restricted }
+// Ключ не редагується (він — посилання у UserRole.role та Topic.roleKey).
+router.patch('/roles/:key', wrap(async (req, res) => {
+  const existing = await prisma.role.findUnique({ where: { key: req.params.key } });
+  if (!existing) return res.status(404).json({ error: 'Роль не знайдено' });
+  const data = {};
+  if (req.body?.name !== undefined) data.name = String(req.body.name).trim();
+  if (req.body?.description !== undefined) data.description = req.body.description || null;
+  if (req.body?.iconKey !== undefined) data.iconKey = req.body.iconKey || null;
+  if (req.body?.color !== undefined) data.color = req.body.color || null;
+  if (req.body?.restricted !== undefined) data.restricted = !!req.body.restricted;
+  const role = await prisma.role.update({ where: { key: req.params.key }, data });
+  await logAction(req.user.id, 'role.updated', 'role', role.key, data);
+  res.json(serializeRole(role));
+}));
+
+// DELETE /api/admin/roles/:key — не protected, без призначень і топіків
+router.delete('/roles/:key', wrap(async (req, res) => {
+  const role = await prisma.role.findUnique({ where: { key: req.params.key } });
+  if (!role) return res.status(404).json({ error: 'Роль не знайдено' });
+  if (role.protected) return res.status(400).json({ error: 'Системну роль видалити не можна' });
+
+  const usedByUsers = await prisma.userRole.count({ where: { role: req.params.key } });
+  if (usedByUsers > 0) return res.status(400).json({ error: 'Роль призначена користувачам — спершу зніміть її' });
+  const usedByTopics = await prisma.topic.count({ where: { roleKey: req.params.key } });
+  if (usedByTopics > 0) return res.status(400).json({ error: 'Є розділи з цією роллю — спершу видаліть або перенесіть їх' });
+
+  await prisma.role.delete({ where: { key: req.params.key } });
+  await logAction(req.user.id, 'role.deleted', 'role', req.params.key);
   res.json({ ok: true });
 }));
 

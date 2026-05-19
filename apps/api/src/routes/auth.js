@@ -2,7 +2,8 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { signToken, publicUser, requireAuth } from '../auth.js';
-import { REFERRAL_WORD, ROLE_KEYS } from '../constants.js';
+import { REFERRAL_WORD } from '../constants.js';
+import { roleExists } from '../lib.js';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.post('/register', wrap(async (req, res) => {
 
   const isFirstUser = (await prisma.user.count()) === 0;
 
-  if (!isFirstUser && (!requestedRole || !ROLE_KEYS.includes(requestedRole) || requestedRole === 'admin')) {
+  if (!isFirstUser && (!requestedRole || requestedRole === 'admin' || !(await roleExists(requestedRole)))) {
     return res.status(400).json({ error: 'Оберіть коректну роль' });
   }
 

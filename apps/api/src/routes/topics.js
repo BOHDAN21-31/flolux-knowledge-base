@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth, requireAdmin } from '../auth.js';
-import { wrap, logAction } from '../lib.js';
+import { wrap, logAction, isAdmin, roleList, restrictedRoleKeys } from '../lib.js';
 
 const router = Router();
 
@@ -17,7 +17,13 @@ const serialize = (t) => ({
 router.get('/', requireAuth, wrap(async (req, res) => {
   const where = req.query.role ? { roleKey: String(req.query.role) } : {};
   const topics = await prisma.topic.findMany({ where, orderBy: { id: 'asc' } });
-  res.json(topics.map(serialize));
+  let list = topics;
+  if (!isAdmin(req.user)) {
+    const restricted = await restrictedRoleKeys();
+    const mine = new Set(roleList(req.user));
+    list = topics.filter((t) => !restricted.has(t.roleKey) || mine.has(t.roleKey));
+  }
+  res.json(list.map(serialize));
 }));
 
 // POST /api/topics  { id, roleKey, title, description, icon }

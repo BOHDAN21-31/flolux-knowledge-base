@@ -2,7 +2,7 @@
 
 export const REFERRAL_WORD = process.env.REFERRAL_WORD || 'Flolux';
 
-// Ключі ролей (без 'admin' для реєстрації — admin призначається лише адміном/першим юзером)
+// Ключі ролей (історичний фолбек). Джерело істини тепер таблиця Role.
 export const ROLE_KEYS = [
   'florist',
   'location_manager',
@@ -15,6 +15,22 @@ export const ROLE_KEYS = [
   'driver',
   'tech',
   'admin',
+];
+
+// Дефолтні ролі для seedRoles() (upsert лише якщо ключа ще немає — не затирає правки адміна).
+export const DEFAULT_ROLES = [
+  { key: 'admin', name: 'Адміністратор', description: 'Повний доступ до системи', iconKey: 'Shield', color: '#e11d48', protected: true, restricted: false },
+  { key: 'florist', name: 'Флорист', description: 'Робота з квітами, букетами та клієнтом', iconKey: 'Flower2', color: '#ec4899', protected: false, restricted: false },
+  { key: 'location_manager', name: 'Управляючий локації', description: 'Управління персоналом і операціями локації', iconKey: 'Users', color: '#a855f7', protected: false, restricted: false },
+  { key: 'warehouse', name: 'Складський працівник', description: 'Робота зі складом, прийом і видача товару', iconKey: 'Box', color: '#f59e0b', protected: false, restricted: false },
+  { key: 'accountant', name: 'Бухгалтер', description: 'Облік, документи, фінансова звітність', iconKey: 'FileText', color: '#10b981', protected: false, restricted: true },
+  { key: 'wholesale', name: 'Оптовий менеджер', description: 'B2B-продажі, оптові клієнти', iconKey: 'Briefcase', color: '#3b82f6', protected: false, restricted: false },
+  { key: 'courier', name: 'Курʼєр', description: 'Доставка замовлень клієнтам', iconKey: 'Truck', color: '#f97316', protected: false, restricted: false },
+  { key: 'logist', name: 'Логіст', description: 'Координація доставок і перевезень', iconKey: 'MapPin', color: '#06b6d4', protected: false, restricted: false },
+  { key: 'barista', name: 'Бариста', description: 'Робота з кавою та напоями', iconKey: 'Coffee', color: '#78716c', protected: false, restricted: false },
+  { key: 'driver', name: 'Водій вантажного авто', description: 'Міжміські перевезення', iconKey: 'Truck', color: '#475569', protected: false, restricted: false },
+  { key: 'tech', name: 'Технічна підтримка', description: 'Обладнання, ПЗ, віддалена допомога', iconKey: 'Wrench', color: '#6366f1', protected: false, restricted: false },
+  { key: 'hr', name: 'HR-менеджер', description: 'Кадрова робота, оголошення, дайджести компанії', iconKey: 'UserCircle2', color: '#d946ef', protected: false, restricted: false },
 ];
 
 export const DEFAULT_TOPICS = {

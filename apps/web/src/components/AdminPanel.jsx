@@ -4,7 +4,7 @@ import {
   Shield, Plus, Trash2, X, Search, ChevronRight, FileText,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api';
-import { ROLES, ROLE_KEYS, roleName } from '../roles';
+import { useRoles } from '../RolesContext';
 import { TOPIC_ICON_NAMES, iconFor } from '../icons';
 import Stars from '../Stars';
 
@@ -17,12 +17,14 @@ const NAV = [
   { key: 'requests', label: 'Запити', icon: Inbox },
   { key: 'content', label: 'Контент', icon: BookOpen },
   { key: 'topics', label: 'Розділи', icon: FileText },
+  { key: 'roles', label: 'Ролі', icon: Shield },
   { key: 'moderation', label: 'Модерація', icon: MessageSquare },
   { key: 'audit', label: 'Журнал дій', icon: ScrollText },
 ];
 
-export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles }) {
-  const [tab, setTab] = useState('dashboard');
+export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, tab: tabProp, onTab }) {
+  const tab = tabProp || 'dashboard';
+  const setTab = (t) => onTab?.(t);
 
   return (
     <div>
@@ -70,6 +72,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
               reloadArticles={reloadArticles} />
           )}
           {tab === 'topics' && <TopicsTab topicsMap={topicsMap} reloadTopics={reloadTopics} />}
+          {tab === 'roles' && <RolesTab />}
           {tab === 'moderation' && <ModerationTab articles={articles} />}
           {tab === 'audit' && <AuditTab />}
         </div>
@@ -84,6 +87,7 @@ function Card({ children, className = '' }) {
 
 // ============ ОГЛЯД ============
 function Dashboard({ onJump }) {
+  const { roleName, roleKeys, roleChipStyle } = useRoles();
   const [s, setS] = useState(null);
   const [err, setErr] = useState('');
 
@@ -118,8 +122,8 @@ function Dashboard({ onJump }) {
       <Card className="p-6">
         <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-4">Користувачі за ролями</h3>
         <div className="flex flex-wrap gap-2">
-          {ROLE_KEYS.filter((k) => s.byRole[k]).map((k) => (
-            <span key={k} className={`px-3 py-1 rounded-full text-xs border ${ROLES[k]?.color || 'bg-stone-100'}`}>
+          {roleKeys.filter((k) => s.byRole[k]).map((k) => (
+            <span key={k} className="px-3 py-1 rounded-full text-xs border" style={roleChipStyle(k)}>
               {roleName(k)}: {s.byRole[k]}
             </span>
           ))}
@@ -164,14 +168,15 @@ function Dashboard({ onJump }) {
 
 // ============ КОРИСТУВАЧІ ============
 function RoleChips({ user, onAdd, onRemove }) {
+  const { roleName, roleKeys, roleChipStyle } = useRoles();
   const [adding, setAdding] = useState(false);
   const has = new Set(user.roles || []);
-  const available = ROLE_KEYS.filter((k) => !has.has(k));
+  const available = roleKeys.filter((k) => !has.has(k));
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {(user.roles || []).map((r) => (
-        <span key={r} className={`text-xs px-2 py-0.5 rounded-full border flex items-center gap-1 ${ROLES[r]?.color || 'bg-stone-100'}`}>
+        <span key={r} className="text-xs px-2 py-0.5 rounded-full border flex items-center gap-1" style={roleChipStyle(r)}>
           {roleName(r)}
           <button onClick={() => onRemove(user.id, r)} className="hover:text-rose-700" title="Зняти роль"><X className="w-3 h-3" /></button>
         </span>
@@ -196,6 +201,7 @@ function RoleChips({ user, onAdd, onRemove }) {
 }
 
 function UsersTab({ allLocations }) {
+  const { roleName, roleKeys } = useRoles();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
@@ -259,7 +265,7 @@ function UsersTab({ allLocations }) {
         </div>
         <select value={fRole} onChange={(e) => setFRole(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-md text-sm">
           <option value="">Усі ролі</option>
-          {ROLE_KEYS.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
+          {roleKeys.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
         </select>
         <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-md text-sm">
           <option value="">Будь-який статус</option>
@@ -354,6 +360,7 @@ function UsersTab({ allLocations }) {
 }
 
 function UserDetailModal({ id, onClose }) {
+  const { roleName, roleChipStyle } = useRoles();
   const [u, setU] = useState(null);
   useEffect(() => { apiGet(`/api/admin/users/${id}`).then(setU).catch((e) => console.error(e)); }, [id]);
 
@@ -373,7 +380,7 @@ function UserDetailModal({ id, onClose }) {
             <div>
               <div className="text-xs uppercase tracking-wider text-stone-500 mb-1">Ролі</div>
               <div className="flex flex-wrap gap-1.5">
-                {(u.roles || []).map((r) => <span key={r} className={`text-xs px-2 py-0.5 rounded-full border ${ROLES[r]?.color || 'bg-stone-100'}`}>{roleName(r)}</span>)}
+                {(u.roles || []).map((r) => <span key={r} className="text-xs px-2 py-0.5 rounded-full border" style={roleChipStyle(r)}>{roleName(r)}</span>)}
                 {(u.roles || []).length === 0 && <span className="text-xs text-stone-400 italic">немає</span>}
               </div>
             </div>
@@ -564,6 +571,7 @@ function LocationsTab({ allLocations, reloadLocations }) {
 
 // ============ ЗАПИТИ ============
 function RequestsTab({ reloadLocations }) {
+  const { roleName } = useRoles();
   const [locReqs, setLocReqs] = useState([]);
   const [roleReqs, setRoleReqs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -638,6 +646,7 @@ function RequestsTab({ reloadLocations }) {
 
 // ============ КОНТЕНТ ============
 function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
+  const { roleName, roleKeys, roleChipStyle } = useRoles();
   const allTopics = useMemo(() => Object.values(topicsMap).flat(), [topicsMap]);
   const topicById = useMemo(() => Object.fromEntries(allTopics.map((t) => [t.id, t])), [allTopics]);
   const topicRole = (a) => topicById[a.topicId]?.roleKey || '—';
@@ -677,7 +686,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
         </div>
         <select value={fRole} onChange={(e) => setFRole(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-md text-sm">
           <option value="">Усі ролі</option>
-          {ROLE_KEYS.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
+          {roleKeys.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
         </select>
         <select value={fLoc} onChange={(e) => setFLoc(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-md text-sm">
           <option value="">Усі локації</option>
@@ -694,7 +703,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
           <button onClick={bulkDelete} className="px-3 py-1 bg-rose-500 text-white rounded text-xs">Видалити вибрані</button>
           <select value={moveTopic} onChange={(e) => setMoveTopic(e.target.value)} className="px-2 py-1 border border-stone-300 rounded text-xs">
             <option value="">Перенести в розділ…</option>
-            {ROLE_KEYS.map((k) => (
+            {roleKeys.map((k) => (
               <optgroup key={k} label={roleName(k)}>
                 {(topicsMap[k] || []).map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
               </optgroup>
@@ -725,7 +734,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
                   <div className="text-sm text-stone-800">{a.title}</div>
                   <div className="text-xs text-stone-400">{new Date(a.createdAt).toLocaleDateString('uk-UA')}</div>
                 </td>
-                <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full border ${ROLES[topicRole(a)]?.color || 'bg-stone-100'}`}>{roleName(topicRole(a))}</span></td>
+                <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full border" style={roleChipStyle(topicRole(a))}>{roleName(topicRole(a))}</span></td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     {(a.locations || []).length === 0 ? <span className="text-xs text-stone-400 italic">усі</span> :
@@ -750,7 +759,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
                 <div className="text-sm text-stone-800">{a.title}</div>
                 <div className="text-xs text-stone-400 mb-2">{new Date(a.createdAt).toLocaleDateString('uk-UA')} · {a.authorName || '—'}</div>
                 <div className="flex flex-wrap gap-1 items-center">
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${ROLES[topicRole(a)]?.color || 'bg-stone-100'}`}>{roleName(topicRole(a))}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full border" style={roleChipStyle(topicRole(a))}>{roleName(topicRole(a))}</span>
                   {(a.locations || []).length === 0 ? <span className="text-xs text-stone-400 italic">усі локації</span> :
                     a.locations.map((l) => <span key={l.locationId} className="text-xs px-1.5 py-0.5 rounded text-white" style={{ background: l.color || '#a8a29e' }}>{l.name}</span>)}
                 </div>
@@ -772,6 +781,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
 }
 
 function PublishModal({ topicsMap, allLocations, onClose, onCreated }) {
+  const { roleName, roleKeys } = useRoles();
   const [role, setRole] = useState('florist');
   const [topicId, setTopicId] = useState('');
   const [form, setForm] = useState({ title: '', content: '', tags: '' });
@@ -809,7 +819,7 @@ function PublishModal({ topicsMap, allLocations, onClose, onCreated }) {
             <div>
               <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Роль</label>
               <select value={role} onChange={(e) => { setRole(e.target.value); setTopicId(''); }} className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm">
-                {ROLE_KEYS.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
+                {roleKeys.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
               </select>
             </div>
             <div>
@@ -866,6 +876,7 @@ function IconPicker({ value, onChange }) {
 }
 
 function TopicsTab({ topicsMap, reloadTopics }) {
+  const { roleName, roleKeys } = useRoles();
   const [selectedRole, setSelectedRole] = useState('florist');
   const [draft, setDraft] = useState({ title: '', description: '', icon: null });
   const [editId, setEditId] = useState(null);
@@ -904,7 +915,7 @@ function TopicsTab({ topicsMap, reloadTopics }) {
           <h3 className="text-lg text-stone-800">Розділи знань</h3>
           <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}
             className="px-3 py-2 border border-stone-200 rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }}>
-            {ROLE_KEYS.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
+            {roleKeys.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
           </select>
         </div>
 
@@ -956,7 +967,117 @@ function TopicsTab({ topicsMap, reloadTopics }) {
 }
 
 // ============ МОДЕРАЦІЯ ============
+// ============ РОЛІ ============
+function RolesTab() {
+  const { roles, reload } = useRoles();
+  const [editing, setEditing] = useState(null); // role obj or {__new:true}
+  const [form, setForm] = useState({ name: '', description: '', iconKey: null, color: '#e11d48', restricted: false });
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const openNew = () => {
+    setForm({ name: '', description: '', iconKey: null, color: '#e11d48', restricted: false });
+    setError(''); setEditing({ __new: true });
+  };
+  const openEdit = (r) => {
+    setForm({ name: r.name, description: r.description || '', iconKey: r.iconKey || null, color: r.color || '#e11d48', restricted: !!r.restricted });
+    setError(''); setEditing(r);
+  };
+  const save = async () => {
+    if (!form.name.trim()) return setError('Вкажіть назву ролі');
+    setBusy(true); setError('');
+    try {
+      if (editing.__new) {
+        await apiPost('/api/admin/roles', form);
+      } else {
+        await apiPatch(`/api/admin/roles/${editing.key}`, form);
+      }
+      await reload();
+      setEditing(null);
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+  const del = async (r) => {
+    if (!window.confirm(`Видалити роль «${r.name}»?`)) return;
+    try { await apiDelete(`/api/admin/roles/${r.key}`); await reload(); }
+    catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg text-stone-800">Ролі ({roles.length})</h3>
+          <button onClick={openNew} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+            <Plus className="w-4 h-4" /> Створити роль
+          </button>
+        </div>
+        <div className="space-y-2">
+          {roles.map((r) => {
+            const Ico = iconFor(r.iconKey, Shield);
+            return (
+              <div key={r.key} className="flex items-center justify-between gap-3 p-3 border border-stone-200 rounded">
+                <button onClick={() => openEdit(r)} className="flex items-center gap-3 text-left min-w-0">
+                  <span className="w-9 h-9 rounded-full flex items-center justify-center border flex-shrink-0"
+                    style={{ background: `${r.color || '#a8a29e'}1A`, color: r.color || '#78716c', borderColor: `${r.color || '#a8a29e'}55` }}>
+                    <Ico className="w-4 h-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="text-sm text-stone-800 flex items-center gap-2 flex-wrap">
+                      {r.name} <code className="text-xs text-stone-400">{r.key}</code>
+                      {r.restricted && <span className="text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200">обмежена</span>}
+                    </span>
+                    {r.description && <span className="block text-xs text-stone-500 truncate">{r.description}</span>}
+                    <span className="block text-xs text-stone-400 mt-0.5">{r.userCount ?? 0} користувач(ів) · {r.topicCount ?? 0} розділ(ів)</span>
+                  </span>
+                </button>
+                {r.protected
+                  ? <span className="text-xs text-stone-400 flex-shrink-0">Системна роль</span>
+                  : <button onClick={() => del(r)} className="w-9 h-9 flex items-center justify-center text-rose-400 hover:text-rose-600 flex-shrink-0"><Trash2 className="w-4 h-4" /></button>}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {editing && (
+        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[90vh] rounded-none sm:rounded-lg flex flex-col overflow-hidden" style={{ fontFamily: 'system-ui, sans-serif' }}>
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-200 sticky top-0 bg-white">
+              <h3 className="text-lg text-stone-800" style={{ fontFamily: 'Georgia, serif' }}>{editing.__new ? 'Нова роль' : `Редагування: ${editing.name}`}</h3>
+              <button onClick={() => setEditing(null)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 sm:p-5 space-y-3 overflow-y-auto flex-1">
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва ролі" className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
+              {editing.__new && form.name && (
+                <p className="text-xs text-stone-400">Ключ: <code>{form.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || '—'}</code></p>
+              )}
+              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} placeholder="Опис" className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm" />
+              <label className="flex items-center gap-3 text-sm text-stone-600">
+                Колір <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 w-16 border border-stone-200 rounded-md" />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-stone-600 min-h-[44px]">
+                <input type="checkbox" className="w-4 h-4" checked={form.restricted} onChange={(e) => setForm({ ...form, restricted: e.target.checked })} />
+                Обмежений доступ (контент бачать лише призначені)
+              </label>
+              <div>
+                <p className="text-xs text-stone-500 mb-1.5">Іконка {form.iconKey && <span className="text-rose-600">· {form.iconKey}</span>}</p>
+                <IconPicker value={form.iconKey} onChange={(ic) => setForm({ ...form, iconKey: ic })} />
+              </div>
+              {error && <div className="p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
+            </div>
+            <div className="p-4 sm:p-5 border-t border-stone-200 flex gap-2 justify-end sticky bottom-0 bg-white">
+              <button onClick={() => setEditing(null)} className="px-4 min-h-[44px] bg-stone-100 text-stone-700 rounded-md text-sm">Скасувати</button>
+              <button onClick={save} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">{busy ? 'Збереження…' : 'Зберегти'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ModerationTab({ articles }) {
+  const { roleName } = useRoles();
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
 

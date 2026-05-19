@@ -3,14 +3,14 @@ import {
   Flower2, BookOpen, Truck, Coffee, Camera, Wrench, Settings, FileText, Users,
   Heart, Star, Sparkles, Gift, Cake, Award, Briefcase, Calendar, Clock, MapPin,
   Phone, Mail, ShoppingCart, CreditCard, Bell, Cloud, Database, Box, Layers,
-  Lightbulb, Music,
+  Lightbulb, Music, Shield, UserCircle2,
 } from 'lucide-react';
 
 export const TOPIC_ICONS = {
   Flower2, BookOpen, Truck, Coffee, Camera, Wrench, Settings, FileText, Users,
   Heart, Star, Sparkles, Gift, Cake, Award, Briefcase, Calendar, Clock, MapPin,
   Phone, Mail, ShoppingCart, CreditCard, Bell, Cloud, Database, Box, Layers,
-  Lightbulb, Music,
+  Lightbulb, Music, Shield, UserCircle2,
 };
 
 export const TOPIC_ICON_NAMES = Object.keys(TOPIC_ICONS);

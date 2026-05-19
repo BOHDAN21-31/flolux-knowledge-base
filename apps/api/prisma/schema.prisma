@@ -43,6 +43,17 @@ model UserRole {
   @@unique([userId, role])
 }
 
+model Role {
+  key         String   @id
+  name        String
+  description String?
+  iconKey     String?
+  color       String?
+  protected   Boolean  @default(false)
+  restricted  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
 model Topic {
   id          String    @id
   roleKey     String

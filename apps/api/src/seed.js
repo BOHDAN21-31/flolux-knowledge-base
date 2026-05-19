@@ -1,5 +1,13 @@
 import { prisma } from './db.js';
-import { DEFAULT_TOPICS } from './constants.js';
+import { DEFAULT_TOPICS, DEFAULT_ROLES } from './constants.js';
+
+// Сід дефолтних ролей. Upsert лише за відсутності ключа — правки адміна не затираються.
+export async function seedRoles() {
+  for (const r of DEFAULT_ROLES) {
+    await prisma.role.upsert({ where: { key: r.key }, update: {}, create: r });
+  }
+  console.log(`[seed] ролі синхронізовано (${DEFAULT_ROLES.length} дефолтних)`);
+}
 
 // Сід дефолтних топіків для всіх ролей. Виконується лише якщо таблиця Topic порожня.
 export async function seedTopics() {

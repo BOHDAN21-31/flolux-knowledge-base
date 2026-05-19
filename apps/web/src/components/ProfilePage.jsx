@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { User, Lock, MapPin, Camera, Check, AlertCircle, Trash2, Fingerprint, Plus, Star, X } from 'lucide-react';
 import { apiPatch, apiPost, apiDelete, apiUpload, webauthnRegister, webauthnSupported } from '../api';
-import { ROLES, roleName, userRoles } from '../roles';
+import { userRoles } from '../roles';
+import { useRoles } from '../RolesContext';
 
 function Banner({ error, success }) {
   if (error) return <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded flex gap-2"><AlertCircle className="w-4 h-4 mt-0.5" />{error}</div>;
@@ -9,8 +10,12 @@ function Banner({ error, success }) {
   return null;
 }
 
-export default function ProfilePage({ user, allLocations, onRefresh }) {
-  const [tab, setTab] = useState('personal');
+const SEC_TO_TAB = { data: 'personal', security: 'security', locations: 'locations' };
+const TAB_TO_SEC = { personal: 'data', security: 'security', locations: 'locations' };
+
+export default function ProfilePage({ user, allLocations, onRefresh, section = 'data', onSection }) {
+  const tab = SEC_TO_TAB[section] || 'personal';
+  const setTab = (k) => onSection?.(TAB_TO_SEC[k] || 'data');
   const tabs = [
     { key: 'personal', label: '📄 Особисті дані' },
     { key: 'security', label: '🔒 Безпека' },
@@ -52,6 +57,7 @@ export default function ProfilePage({ user, allLocations, onRefresh }) {
 }
 
 function PersonalSection({ user, allLocations, onRefresh }) {
+  const { roleName, roleChipStyle } = useRoles();
   const [form, setForm] = useState({
     name: user.name || '', surname: user.surname || '',
     email: user.email || '', phone: user.phone || '',
@@ -126,7 +132,7 @@ function PersonalSection({ user, allLocations, onRefresh }) {
         ) : (
           <div className="flex flex-wrap gap-2">
             {userRoles(user).map((r) => (
-              <span key={r} className={`px-3 py-1 rounded-full text-sm border ${ROLES[r]?.color || 'bg-stone-100 text-stone-700'}`}>
+              <span key={r} className="px-3 py-1 rounded-full text-sm border" style={roleChipStyle(r)}>
                 {roleName(r)}
               </span>
             ))}

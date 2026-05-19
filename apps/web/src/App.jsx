@@ -1,11 +1,43 @@
-import { useState, useEffect, useRef } from 'react';
-import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown } from 'lucide-react';
+import { useState, useEffect, useRef, createElement } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
 import AdminPanel from './components/AdminPanel';
 import Stars from './Stars';
-import { ROLES, REGISTER_ROLES, ROLE_KEYS, roleName, userRoles, isAdminUser } from './roles';
+import { userRoles, isAdminUser } from './roles';
+import { RolesProvider, useRoles } from './RolesContext';
 import { iconFor } from './icons';
+
+// ── Навігаційний стек ⇄ URL ──
+function pathForFrame(f) {
+  switch (f?.type) {
+    case 'tech': return '/tech';
+    case 'profile': return f.section ? `/profile/${f.section}` : '/profile';
+    case 'admin': return f.tab ? `/admin/${f.tab}` : '/admin';
+    case 'topic': return `/topics/${f.topicId}`;
+    case 'article': return `/articles/${f.articleId}`;
+    case 'editArticle': return `/articles/${f.articleId}/edit`;
+    case 'createArticle': return `/topics/${f.topicId}/new`;
+    default: return '/';
+  }
+}
+function frameFromPath(pathname) {
+  const p = (pathname || '/').replace(/\/+$/, '') || '/';
+  if (p === '/' || p === '') return { type: 'home' };
+  if (p === '/tech') return { type: 'tech' };
+  if (p === '/profile') return { type: 'profile' };
+  if (p === '/admin') return { type: 'admin' };
+  let m;
+  if ((m = p.match(/^\/profile\/(data|security|locations)$/))) return { type: 'profile', section: m[1] };
+  if ((m = p.match(/^\/admin\/([^/]+)$/))) return { type: 'admin', tab: m[1] };
+  if ((m = p.match(/^\/topics\/([^/]+)\/new$/))) return { type: 'createArticle', topicId: m[1] };
+  if ((m = p.match(/^\/topics\/([^/]+)$/))) return { type: 'topic', topicId: m[1] };
+  if ((m = p.match(/^\/articles\/([^/]+)\/edit$/))) return { type: 'editArticle', articleId: m[1] };
+  if ((m = p.match(/^\/articles\/([^/]+)$/))) return { type: 'article', articleId: m[1] };
+  return { type: 'home' };
+}
+const TOP_LEVEL = ['home', 'tech', 'admin', 'profile'];
 
 // ============ КОНСТАНТИ ============
 const REFERRAL_WORD = 'Flolux';
@@ -23,6 +55,14 @@ function groupTopics(list) {
 
 // ============ ГОЛОВНИЙ КОМПОНЕНТ ============
 export default function FloluxKB() {
+  return (
+    <RolesProvider>
+      <AppInner />
+    </RolesProvider>
+  );
+}
+
+function AppInner() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [topicsMap, setTopicsMap] = useState({});
@@ -32,12 +72,32 @@ export default function FloluxKB() {
 
   const [authMode, setAuthMode] = useState('login');
 
-  // ── Навігаційний стек (Задача 5): надійний back без білого екрана ──
-  const [stack, setStack] = useState([{ type: 'home' }]);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // ── Навігаційний стек (Задача 5) синхронізований з URL (Задача 2) ──
+  const initFrame = frameFromPath(window.location.pathname);
+  const [stack, setStack] = useState(
+    TOP_LEVEL.includes(initFrame.type) ? [initFrame] : [{ type: 'home' }, initFrame]
+  );
   const current = stack[stack.length - 1];
-  const push = (frame) => setStack((s) => [...s, frame]);
-  const back = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : [{ type: 'home' }]));
-  const reset = (frame) => setStack([frame]);
+
+  const go = (nextStack) => {
+    setStack(nextStack);
+    const path = pathForFrame(nextStack[nextStack.length - 1]);
+    if (path !== location.pathname) navigate(path);
+  };
+  const push = (frame) => go([...stack, frame]);
+  const back = () => go(stack.length > 1 ? stack.slice(0, -1) : [{ type: 'home' }]);
+  const reset = (frame) => go([frame]);
+
+  // URL → стек (reload, ручний перехід, browser back/forward)
+  useEffect(() => {
+    if (pathForFrame(current) === location.pathname) return;
+    const f = frameFromPath(location.pathname);
+    setStack(TOP_LEVEL.includes(f.type) ? [f] : [{ type: 'home' }, f]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const refreshMe = async () => {
     const me = await apiGet('/api/users/me');
@@ -59,9 +119,11 @@ export default function FloluxKB() {
     const onUnauthorized = () => {
       setCurrentUser(null);
       setStack([{ type: 'home' }]);
+      navigate('/');
     };
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Завантаження даних після входу
@@ -97,11 +159,13 @@ export default function FloluxKB() {
     clearToken();
     setCurrentUser(null);
     setStack([{ type: 'home' }]);
+    navigate('/');
   };
 
   const onAuthSuccess = async () => {
     await refreshMe().catch(() => {});
     setStack([{ type: 'home' }]);
+    navigate('/');
   };
 
   if (!authChecked) return <Splash text="Завантаження..." />;
@@ -131,11 +195,20 @@ export default function FloluxKB() {
         allLocations={allLocations}
         isAdmin={isAdmin}
         onTopicClick={(t) => push({ type: 'topic', topicId: t.id })}
+        onArticleClick={(a) => push({ type: 'article', articleId: a.id })}
         onGoProfile={() => reset({ type: 'profile' })}
       />
     );
   } else if (current.type === 'profile') {
-    screen = <ProfilePage user={currentUser} allLocations={allLocations} onRefresh={refreshMe} />;
+    screen = (
+      <ProfilePage
+        user={currentUser}
+        allLocations={allLocations}
+        onRefresh={refreshMe}
+        section={current.section || 'data'}
+        onSection={(s) => reset({ type: 'profile', section: s })}
+      />
+    );
   } else if (current.type === 'tech') {
     screen = (
       <TechView
@@ -153,6 +226,8 @@ export default function FloluxKB() {
         allLocations={allLocations}
         reloadLocations={reloadLocations}
         reloadArticles={reloadArticles}
+        tab={current.tab || 'dashboard'}
+        onTab={(t) => reset({ type: 'admin', tab: t })}
       />
     );
   } else if (current.type === 'topic') {
@@ -167,17 +242,16 @@ export default function FloluxKB() {
       />
     ) : <NotFound onBack={back} />;
   } else if (current.type === 'article') {
-    const article = articleById(current.articleId);
-    screen = article ? (
+    screen = (
       <ArticleView
-        article={article}
+        articleId={current.articleId}
         user={currentUser}
         isAdmin={isAdmin}
         onBack={back}
-        onEdit={() => push({ type: 'editArticle', articleId: article.id })}
+        onEdit={() => push({ type: 'editArticle', articleId: current.articleId })}
         onArticleUpdated={reloadArticles}
       />
-    ) : <NotFound onBack={back} />;
+    );
   } else if (current.type === 'createArticle') {
     const topic = topicById(current.topicId);
     screen = topic ? (
@@ -254,6 +328,7 @@ function Splash({ text }) {
 
 // ============ AUTH ============
 function AuthScreen({ mode, setMode, onSuccess }) {
+  const { registerRoles } = useRoles();
   const [form, setForm] = useState({ email: '', password: '', name: '', referral: '', requestedRole: 'florist', resetEmail: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -389,8 +464,8 @@ function AuthScreen({ mode, setMode, onSuccess }) {
                     className="w-full pl-10 pr-3 py-2.5 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200 text-stone-800 bg-stone-50/50"
                     style={{ fontFamily: 'system-ui, sans-serif' }}
                   >
-                    {REGISTER_ROLES.map(([key, r]) => (
-                      <option key={key} value={key}>{r.name}</option>
+                    {registerRoles.map((r) => (
+                      <option key={r.key} value={r.key}>{r.name}</option>
                     ))}
                   </select>
                 </div>
@@ -451,19 +526,22 @@ function Field({ icon: Icon, label, type, value, onChange, hint, rightIcon: Righ
 
 // ============ HEADER ============
 function HeaderAvatar({ user, primary, size }) {
-  const RoleIcon = ROLES[primary]?.icon || User;
+  const { byKey, roleChipStyle } = useRoles();
   return (
-    <span className={`${size} rounded-full flex items-center justify-center overflow-hidden border ${ROLES[primary]?.color || 'bg-stone-100 text-stone-600'}`}>
-      {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : <RoleIcon className="w-4 h-4" />}
+    <span className={`${size} rounded-full flex items-center justify-center overflow-hidden border`} style={roleChipStyle(primary)}>
+      {user.avatarUrl
+        ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+        : createElement(iconFor(byKey[primary]?.iconKey, User), { className: 'w-4 h-4' })}
     </span>
   );
 }
 
 function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
+  const { roleName } = useRoles();
   const roles = userRoles(user);
   const primary = isAdmin ? 'admin' : (user.role || roles[0] || null);
   const roleLabel = primary
-    ? `${ROLES[primary]?.name || 'Без ролі'}${roles.length > 1 ? ` +${roles.length - 1}` : ''}`
+    ? `${roleName(primary)}${roles.length > 1 ? ` +${roles.length - 1}` : ''}`
     : 'Без ролі';
 
   return (
@@ -553,9 +631,27 @@ function MobileBottomNav({ view, isAdmin, onNavigate, onProfile }) {
 }
 
 // ============ ГОЛОВНА ============
-function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicClick, onGoProfile }) {
+function FilterChip({ label, onRemove }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-stone-100 text-stone-700 border border-stone-200">
+      {label}
+      <button onClick={onRemove} className="hover:text-rose-600"><X className="w-3 h-3" /></button>
+    </span>
+  );
+}
+
+function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicClick, onArticleClick, onGoProfile }) {
+  const { roleName, roleKeys, roleChipStyle, byKey } = useRoles();
   const roles = userRoles(user);
   const [roleFilter, setRoleFilter] = useState('all');
+  const [q, setQ] = useState('');
+  const [selRoles, setSelRoles] = useState([]);
+  const [selLocs, setSelLocs] = useState([]);
+  const [sort, setSort] = useState('new');
+  const [showAllPublic, setShowAllPublic] = useState(false);
+  const [mobileFilters, setMobileFilters] = useState(false);
+  const [results, setResults] = useState([]);
+  const [resultsLoading, setResultsLoading] = useState(false);
 
   if (!isAdmin && roles.length === 0) {
     return (
@@ -572,8 +668,11 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
     );
   }
 
-  // admin бачить усі ролі групами; інші — лише свої.
-  const baseRoles = isAdmin ? ROLE_KEYS : roles;
+  // admin — усі ролі; інші — свої, + (за toggle) усі публічні (не restricted).
+  const publicRoles = roleKeys.filter((k) => !byKey[k]?.restricted);
+  const baseRoles = isAdmin
+    ? roleKeys
+    : (showAllPublic ? [...new Set([...roles, ...publicRoles])] : roles);
   const shownRoles = (roleFilter === 'all' ? baseRoles : [roleFilter]).filter((r) => (topics[r] || []).length > 0);
   const allShownTopics = shownRoles.flatMap((r) => topics[r] || []);
   const recentArticles = articles
@@ -584,6 +683,90 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
   const approved = (user.locations || []).filter((l) => l.approved);
   // userCount з бекенду включає мене -> для моїх локацій мінус я сам.
   const countFor = (id) => Math.max(0, (allLocations.find((x) => x.id === id)?.userCount ?? 0) - 1);
+
+  // P5: фільтри бібліотеки
+  const topicRoleOf = (a) => {
+    for (const rk of Object.keys(topics)) {
+      if ((topics[rk] || []).some((t) => t.id === a.topicId)) return rk;
+    }
+    return null;
+  };
+  const roleOptions = baseRoles;
+  const locOptions = isAdmin ? allLocations : allLocations.filter((l) => approved.some((ap) => ap.locationId === l.id));
+  const toggleIn = (arr, set, v) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+  const filtersActive = !!q.trim() || selRoles.length > 0 || selLocs.length > 0;
+
+  const SORTS = { new: 'Нові', old: 'Старі', title: 'Назва А-Я', rating: 'За рейтингом' };
+
+  // P6: фільтрація на бекенді (GET /api/articles?roleKey&locationId&q&sort)
+  useEffect(() => {
+    if (!filtersActive) { setResults([]); return; }
+    const sortMap = { new: 'new', old: 'old', title: 'az', rating: 'rating' };
+    const params = new URLSearchParams();
+    if (selRoles.length) params.set('roleKey', selRoles.join(','));
+    if (selLocs.length) params.set('locationId', selLocs.join(','));
+    if (q.trim()) params.set('q', q.trim());
+    params.set('sort', sortMap[sort] || 'new');
+    let active = true;
+    setResultsLoading(true);
+    apiGet(`/api/articles?${params.toString()}`)
+      .then((list) => { if (active) setResults(Array.isArray(list) ? list : []); })
+      .catch((e) => { if (active) { console.error(e); setResults([]); } })
+      .finally(() => { if (active) setResultsLoading(false); });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersActive, q, sort, selRoles.join(','), selLocs.join(',')]);
+
+  const activeCount = (q.trim() ? 1 : 0) + selRoles.length + selLocs.length;
+
+  const filterControls = (
+    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук по статтях…"
+            className="w-full pl-10 pr-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
+        </div>
+        <select value={sort} onChange={(e) => setSort(e.target.value)}
+          className="min-h-[44px] px-3 border border-stone-200 rounded-md text-sm">
+          {Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>Сортувати: {v}</option>)}
+        </select>
+      </div>
+      {!isAdmin && publicRoles.length > roles.length && (
+        <label className="flex items-center gap-2 text-sm text-stone-600 mt-3">
+          <input type="checkbox" className="w-4 h-4" checked={showAllPublic} onChange={(e) => setShowAllPublic(e.target.checked)} />
+          Показати всі публічні ролі
+        </label>
+      )}
+      {roleOptions.length > 1 && (
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          {roleOptions.map((rk) => {
+            const on = selRoles.includes(rk);
+            return (
+              <button key={rk} onClick={() => toggleIn(selRoles, setSelRoles, rk)}
+                className="px-3 py-1.5 rounded-full text-xs border" style={on ? roleChipStyle(rk) : { borderColor: '#e7e5e4', color: '#78716c' }}>
+                {roleName(rk)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {locOptions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {locOptions.map((l) => {
+            const on = selLocs.includes(l.id);
+            return (
+              <button key={l.id} onClick={() => toggleIn(selLocs, setSelLocs, l.id)}
+                className={`px-3 py-1.5 rounded-full text-xs border ${on ? 'text-white border-transparent' : 'text-stone-600 border-stone-300'}`}
+                style={on ? { background: l.color || '#a8a29e' } : undefined}>
+                {l.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -617,72 +800,141 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
         )}
       </div>
 
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xs uppercase tracking-widest text-stone-400">
-          {isAdmin ? 'Усі розділи знань' : 'Розділи знань для ваших ролей'}
-        </h2>
-        {baseRoles.length > 1 && (
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
-            className="text-sm border border-stone-200 rounded-md px-3 py-1.5 bg-white" style={{ fontFamily: 'system-ui, sans-serif' }}>
-            <option value="all">Усе</option>
-            {baseRoles.map((r) => <option key={r} value={r}>{roleName(r)}</option>)}
-          </select>
-        )}
+      {/* P5/P6: панель фільтрів — desktop inline, mobile у sheet */}
+      <div className="hidden md:block bg-white border border-stone-200 rounded-lg p-4 mb-4">
+        {filterControls}
       </div>
-
-      <div className="space-y-10 mb-12">
-        {shownRoles.map((rk) => (
-          <div key={rk}>
-            {(shownRoles.length > 1) && (
-              <h3 className="text-sm text-stone-600 mb-3 flex items-center gap-2">
-                <span className={`px-2 py-0.5 rounded-full text-xs border ${ROLES[rk]?.color || 'bg-stone-100'}`}>{roleName(rk)}</span>
-              </h3>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(topics[rk] || []).map((topic) => {
-                const count = articles.filter((a) => a.topicId === topic.id).length;
-                const Ico = iconFor(topic.icon);
-                return (
-                  <button key={topic.id} onClick={() => onTopicClick(topic)}
-                    className="text-left bg-white border border-stone-200 rounded-lg p-5 md:p-6 hover:border-rose-300 hover:shadow-md transition group">
-                    <div className="flex items-start gap-4">
-                      <div className="w-11 h-11 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0 group-hover:bg-rose-100 transition">
-                        <Ico className="w-5 h-5 text-rose-500" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-1">
-                          <h3 className="text-xl text-stone-800 group-hover:text-rose-600 transition">{topic.title}</h3>
-                          <ChevronRight className="w-5 h-5 text-stone-300 group-hover:text-rose-400 group-hover:translate-x-1 transition" />
-                        </div>
-                        <p className="text-sm text-stone-500 italic mb-2">{topic.description}</p>
-                        <p className="text-xs text-stone-400">{count} {articleWord(count)}</p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+      <div className="md:hidden mb-4">
+        <button onClick={() => setMobileFilters(true)}
+          className="w-full flex items-center justify-center gap-2 min-h-[44px] bg-white border border-stone-200 rounded-md text-sm text-stone-700">
+          <Search className="w-4 h-4" /> Фільтри{activeCount ? ` (${activeCount})` : ''}
+        </button>
+      </div>
+      {mobileFilters && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-stone-900/50" onClick={() => setMobileFilters(false)} />
+          <div className="relative bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-stone-200 sticky top-0 bg-white">
+              <h3 className="text-lg text-stone-800">Фільтри</h3>
+              <button onClick={() => setMobileFilters(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4">{filterControls}</div>
+            <div className="p-4 border-t border-stone-200 sticky bottom-0 bg-white flex gap-2">
+              <button onClick={() => { setQ(''); setSelRoles([]); setSelLocs([]); }} className="flex-1 min-h-[44px] bg-stone-100 text-stone-700 rounded-md text-sm">Скинути</button>
+              <button onClick={() => setMobileFilters(false)} className="flex-1 min-h-[44px] bg-rose-500 text-white rounded-md text-sm">Показати</button>
             </div>
           </div>
-        ))}
-        {shownRoles.length === 0 && (
-          <p className="text-stone-400 italic">Розділів ще немає.</p>
-        )}
-      </div>
+        </div>
+      )}
 
-      {recentArticles.length > 0 && (
-        <>
-          <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4">Останні матеріали</h2>
-          <div className="space-y-3">
-            {recentArticles.map((a) => (
-              <div key={a.id} className="bg-white border border-stone-200 rounded p-4 hover:border-stone-300 transition cursor-pointer">
-                <div className="flex items-center gap-2 text-xs text-stone-400 mb-1">
-                  <Clock className="w-3 h-3" />
-                  {new Date(a.createdAt).toLocaleDateString('uk-UA')}
+      {filtersActive && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {q.trim() && <FilterChip label={`Пошук: ${q.trim()}`} onRemove={() => setQ('')} />}
+          {selRoles.map((rk) => <FilterChip key={rk} label={roleName(rk)} onRemove={() => toggleIn(selRoles, setSelRoles, rk)} />)}
+          {selLocs.map((id) => <FilterChip key={id} label={allLocations.find((l) => l.id === id)?.name || id} onRemove={() => toggleIn(selLocs, setSelLocs, id)} />)}
+          <button onClick={() => { setQ(''); setSelRoles([]); setSelLocs([]); }} className="text-xs text-stone-500 hover:text-rose-600">Скинути все</button>
+        </div>
+      )}
+
+      {filtersActive ? (
+        <div className="space-y-3 mb-12">
+          <p className="text-xs uppercase tracking-widest text-stone-400">{resultsLoading ? 'Пошук…' : `Знайдено: ${results.length}`}</p>
+          {results.map((a) => {
+            const rk = topicRoleOf(a);
+            return (
+              <button key={a.id} onClick={() => onArticleClick(a)}
+                className="block w-full text-left bg-white border border-stone-200 rounded-lg p-4 md:p-5 hover:border-rose-300 hover:shadow-sm transition">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-stone-800 mb-1">{a.title}</h3>
+                    <p className="text-sm text-stone-500 line-clamp-2 mb-2">{a.content.replace(/[*#]/g, '').substring(0, 160)}</p>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-stone-400">
+                      {rk && <span className="px-2 py-0.5 rounded-full border" style={roleChipStyle(rk)}>{roleName(rk)}</span>}
+                      <span>{new Date(a.createdAt).toLocaleDateString('uk-UA')}</span>
+                      {a.ratingAvg > 0 && <span>★ {a.ratingAvg}</span>}
+                      {(a.locations || []).map((l) => (
+                        <span key={l.locationId} className="px-1.5 py-0.5 rounded text-white" style={{ background: l.color || '#a8a29e' }}>{l.name}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-stone-300 flex-shrink-0 mt-1" />
                 </div>
-                <h3 className="text-stone-800">{a.title}</h3>
+              </button>
+            );
+          })}
+          {!resultsLoading && results.length === 0 && <p className="text-stone-400 italic">Нічого не знайдено за фільтрами.</p>}
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs uppercase tracking-widest text-stone-400">
+              {isAdmin ? 'Усі розділи знань' : 'Розділи знань для ваших ролей'}
+            </h2>
+            {baseRoles.length > 1 && (
+              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
+                className="text-sm border border-stone-200 rounded-md px-3 py-1.5 bg-white" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                <option value="all">Усе</option>
+                {baseRoles.map((r) => <option key={r} value={r}>{roleName(r)}</option>)}
+              </select>
+            )}
+          </div>
+
+          <div className="space-y-10 mb-12">
+            {shownRoles.map((rk) => (
+              <div key={rk}>
+                {(shownRoles.length > 1) && (
+                  <h3 className="text-sm text-stone-600 mb-3 flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full text-xs border" style={roleChipStyle(rk)}>{roleName(rk)}</span>
+                  </h3>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {(topics[rk] || []).map((topic) => {
+                    const count = articles.filter((a) => a.topicId === topic.id).length;
+                    const Ico = iconFor(topic.icon);
+                    return (
+                      <button key={topic.id} onClick={() => onTopicClick(topic)}
+                        className="text-left bg-white border border-stone-200 rounded-lg p-5 md:p-6 hover:border-rose-300 hover:shadow-md transition group">
+                        <div className="flex items-start gap-4">
+                          <div className="w-11 h-11 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0 group-hover:bg-rose-100 transition">
+                            <Ico className="w-5 h-5 text-rose-500" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between mb-1">
+                              <h3 className="text-xl text-stone-800 group-hover:text-rose-600 transition">{topic.title}</h3>
+                              <ChevronRight className="w-5 h-5 text-stone-300 group-hover:text-rose-400 group-hover:translate-x-1 transition" />
+                            </div>
+                            <p className="text-sm text-stone-500 italic mb-2">{topic.description}</p>
+                            <p className="text-xs text-stone-400">{count} {articleWord(count)}</p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ))}
+            {shownRoles.length === 0 && (
+              <p className="text-stone-400 italic">Розділів ще немає.</p>
+            )}
           </div>
+
+          {recentArticles.length > 0 && (
+            <>
+              <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4">Останні матеріали</h2>
+              <div className="space-y-3">
+                {recentArticles.map((a) => (
+                  <button key={a.id} onClick={() => onArticleClick(a)}
+                    className="block w-full text-left bg-white border border-stone-200 rounded p-4 hover:border-stone-300 transition">
+                    <div className="flex items-center gap-2 text-xs text-stone-400 mb-1">
+                      <Clock className="w-3 h-3" />
+                      {new Date(a.createdAt).toLocaleDateString('uk-UA')}
+                    </div>
+                    <h3 className="text-stone-800">{a.title}</h3>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
@@ -805,63 +1057,98 @@ function TopicView({ topic, articles, onBack, onArticleClick, onCreate }) {
 }
 
 // ============ СТАТТЯ ============
-function ArticleView({ article, user, isAdmin, onBack, onEdit }) {
-  const [comments, setComments] = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
+function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdated }) {
+  const { roleName, roleChipStyle } = useRoles();
+  const [article, setArticle] = useState(null);
+  const [status, setStatus] = useState('loading'); // loading | ok | error
   const [commentText, setCommentText] = useState('');
   const [suggestionText, setSuggestionText] = useState('');
   const [showSuggest, setShowSuggest] = useState(false);
   const [openSug, setOpenSug] = useState(false);
   const [openCom, setOpenCom] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const canEdit = isAdmin || article.author === user.id;
-
+  // P1: статтю (разом з коментарями/пропозиціями/рейтингами) тягнемо з GET /api/articles/:id.
+  // Дані персистентні в БД — після F5 підвантажуються знову.
+  const load = async () => {
+    try {
+      const a = await apiGet(`/api/articles/${articleId}`);
+      setArticle(a);
+      setStatus('ok');
+      if (onArticleUpdated) onArticleUpdated();
+    } catch (e) {
+      console.error(e);
+      setStatus('error');
+    }
+  };
   useEffect(() => {
+    setStatus('loading');
     let active = true;
-    Promise.all([
-      apiGet(`/api/articles/${article.id}/comments`),
-      apiGet(`/api/articles/${article.id}/suggestions`),
-    ]).then(([c, s]) => {
-      if (!active) return;
-      setComments(c);
-      setSuggestions(s);
-    }).catch((e) => console.error(e));
+    apiGet(`/api/articles/${articleId}`)
+      .then((a) => { if (active) { setArticle(a); setStatus('ok'); } })
+      .catch((e) => { if (active) { console.error(e); setStatus('error'); } });
     return () => { active = false; };
-  }, [article.id]);
+  }, [articleId]);
+
+  const comments = article?.comments || [];
+  const suggestions = article?.suggestions || [];
+  const canEdit = !!article && (isAdmin || article.author === user.id);
 
   const handleComment = async () => {
     if (!commentText.trim()) return;
-    const c = await apiPost(`/api/articles/${article.id}/comments`, { content: commentText });
-    setComments((prev) => [...prev, c]);
+    await apiPost(`/api/articles/${articleId}/comments`, { content: commentText });
     setCommentText('');
+    await load();
   };
 
   const handleSuggestion = async () => {
     if (!suggestionText.trim()) return;
-    const s = await apiPost(`/api/articles/${article.id}/suggestions`, { content: suggestionText });
-    setSuggestions((prev) => [...prev, s]);
+    await apiPost(`/api/articles/${articleId}/suggestions`, { content: suggestionText });
     setSuggestionText('');
     setShowSuggest(false);
+    await load();
   };
 
-  const setSuggStatus = async (sugg, status) => {
-    const updated = await apiPatch(`/api/suggestions/${sugg.id}`, { status });
-    setSuggestions((prev) => prev.map((s) => (s.id === sugg.id ? updated : s)));
+  const setSuggStatus = async (sugg, st) => {
+    await apiPatch(`/api/suggestions/${sugg.id}`, { status: st });
+    await load();
   };
 
   const rateSuggestion = async (sugg, rating) => {
-    const updated = await apiPost(`/api/suggestions/${sugg.id}/rate`, { rating });
-    setSuggestions((prev) =>
-      prev
-        .map((s) => (s.id === sugg.id ? updated : s))
-        .sort((a, b) => b.ratingAvg - a.ratingAvg || b.createdAt - a.createdAt));
+    await apiPost(`/api/suggestions/${sugg.id}/rate`, { rating });
+    await load();
   };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch { /* clipboard недоступний */ }
+  };
+
+  if (status === 'loading') {
+    return <div className="text-center py-16 text-stone-400 italic">Завантаження статті…</div>;
+  }
+  if (status === 'error' || !article) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-stone-500 italic mb-4">Статтю не знайдено або вона недоступна.</p>
+        <button onClick={onBack} className="px-4 min-h-[44px] bg-rose-500 text-white rounded-md text-sm">Повернутися</button>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800 mb-4 min-h-[44px] transition">
-        <ArrowLeft className="w-4 h-4" /> До розділу
-      </button>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800 min-h-[44px] transition">
+          <ArrowLeft className="w-4 h-4" /> Повернутися
+        </button>
+        <button onClick={copyLink} className="flex items-center gap-2 text-sm text-stone-500 hover:text-rose-600 min-h-[44px] transition" title="Копіювати посилання">
+          <Link2 className="w-4 h-4" /> {copied ? 'Скопійовано' : 'Копіювати посилання'}
+        </button>
+      </div>
 
       <article className="bg-white border border-stone-200 rounded-lg p-5 md:p-8 mb-6">
         <>
@@ -997,13 +1284,13 @@ function ArticleView({ article, user, isAdmin, onBack, onEdit }) {
           ) : (
             comments.map((c) => (
               <div key={c.id} className="flex gap-3 p-3 bg-stone-50 rounded">
-                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs ${ROLES[c.authorRole]?.color || 'bg-stone-100'}`}>
+                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs border" style={roleChipStyle(c.authorRole)}>
                   {(c.authorName || '?')[0]}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm text-stone-700">{c.authorName}</span>
-                    <span className="text-xs text-stone-400">{ROLES[c.authorRole]?.name}</span>
+                    <span className="text-xs text-stone-400">{roleName(c.authorRole)}</span>
                     <span className="text-xs text-stone-400">· {new Date(c.createdAt).toLocaleDateString('uk-UA')}</span>
                   </div>
                   <p className="text-sm text-stone-700" style={{ fontFamily: 'system-ui, sans-serif' }}>{c.content}</p>
