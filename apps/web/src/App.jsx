@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
+import PublicProfile from './components/PublicProfile';
 import AdminPanel from './components/AdminPanel';
 import Stars from './Stars';
 import { userRoles, isAdminUser } from './roles';
@@ -15,6 +16,7 @@ function pathForFrame(f) {
     case 'tech': return '/tech';
     case 'profile': return f.section ? `/profile/${f.section}` : '/profile';
     case 'admin': return f.tab ? `/admin/${f.tab}` : '/admin';
+    case 'publicProfile': return `/users/${f.userId}`;
     case 'topic': return `/topics/${f.topicId}`;
     case 'article': return `/articles/${f.articleId}`;
     case 'editArticle': return `/articles/${f.articleId}/edit`;
@@ -30,6 +32,7 @@ function frameFromPath(pathname) {
   if (p === '/admin') return { type: 'admin' };
   let m;
   if ((m = p.match(/^\/profile\/(data|security|locations)$/))) return { type: 'profile', section: m[1] };
+  if ((m = p.match(/^\/users\/([^/]+)$/))) return { type: 'publicProfile', userId: m[1] };
   if ((m = p.match(/^\/admin\/([^/]+)$/))) return { type: 'admin', tab: m[1] };
   if ((m = p.match(/^\/topics\/([^/]+)\/new$/))) return { type: 'createArticle', topicId: m[1] };
   if ((m = p.match(/^\/topics\/([^/]+)$/))) return { type: 'topic', topicId: m[1] };
@@ -209,6 +212,15 @@ function AppInner() {
         onSection={(s) => reset({ type: 'profile', section: s })}
       />
     );
+  } else if (current.type === 'publicProfile') {
+    screen = (
+      <PublicProfile
+        userId={current.userId}
+        currentUser={currentUser}
+        onBack={back}
+        onEditProfile={() => reset({ type: 'profile' })}
+      />
+    );
   } else if (current.type === 'tech') {
     screen = (
       <TechView
@@ -250,6 +262,7 @@ function AppInner() {
         onBack={back}
         onEdit={() => push({ type: 'editArticle', articleId: current.articleId })}
         onArticleUpdated={reloadArticles}
+        onOpenUser={(id) => id && push({ type: 'publicProfile', userId: id })}
       />
     );
   } else if (current.type === 'createArticle') {
@@ -1057,7 +1070,7 @@ function TopicView({ topic, articles, onBack, onArticleClick, onCreate }) {
 }
 
 // ============ СТАТТЯ ============
-function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdated }) {
+function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdated, onOpenUser }) {
   const { roleName, roleChipStyle } = useRoles();
   const [article, setArticle] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | ok | error
@@ -1167,7 +1180,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
               {article.authorName && article.author !== 'system' && (
                 <>
                   <span>·</span>
-                  <span>{article.authorName}</span>
+                  <button onClick={() => onOpenUser?.(article.author)} className="hover:text-rose-600 hover:underline">{article.authorName}</button>
                 </>
               )}
               {article.tags && article.tags.length > 0 && (
@@ -1289,7 +1302,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm text-stone-700">{c.authorName}</span>
+                    <button onClick={() => onOpenUser?.(c.author)} className="text-sm text-stone-700 hover:text-rose-600 hover:underline">{c.authorName}</button>
                     <span className="text-xs text-stone-400">{roleName(c.authorRole)}</span>
                     <span className="text-xs text-stone-400">· {new Date(c.createdAt).toLocaleDateString('uk-UA')}</span>
                   </div>

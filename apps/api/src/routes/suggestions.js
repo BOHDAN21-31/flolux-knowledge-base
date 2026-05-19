@@ -46,6 +46,19 @@ router.post('/:id/rate', requireAuth, wrap(async (req, res) => {
     create: { suggestionId: req.params.id, userId: req.user.id, rating },
   });
 
+  // Рейтинг автора пропозиції = кількість отриманих оцінок 4–5 зірок
+  const author = await prisma.user.findUnique({
+    where: { id: suggestion.authorId },
+    include: { suggestions: { include: { ratings: true } } },
+  });
+  if (author) {
+    const totalGoodRatings = author.suggestions.reduce(
+      (sum, s) => sum + s.ratings.filter((r) => r.rating >= 4).length,
+      0,
+    );
+    await prisma.user.update({ where: { id: author.id }, data: { rating: totalGoodRatings } });
+  }
+
   const updated = await prisma.suggestion.findUnique({
     where: { id: req.params.id },
     include: { author: true, ratings: true },

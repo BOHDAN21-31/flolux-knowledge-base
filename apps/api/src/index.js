@@ -59,6 +59,24 @@ if (fs.existsSync(PUBLIC_DIR)) {
   });
 }
 
+// 404 (для не-API/не-SPA шляхів)
+app.use((req, res) => res.status(404).json({ error: 'Not found' }));
+
+// Глобальний обробник помилок Express — будь-який throw у роутах -> JSON, не краш
+app.use((err, req, res, next) => {
+  console.error('[express error]', err);
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+});
+
+// Один збій не валить увесь сервіс — лише лог (без process.exit)
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+});
+
 app.listen(PORT, () => {
   console.log(`Flolux API слухає на :${PORT}`);
 });

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { requireAuth, publicUser } from '../auth.js';
-import { wrap, logAction } from '../lib.js';
+import { wrap, logAction, roleList } from '../lib.js';
 
 const router = Router();
 
@@ -121,6 +121,34 @@ router.delete('/me/locations/:locationId', requireAuth, wrap(async (req, res) =>
   });
   await logAction(req.user.id, 'user.location_left', 'location', req.params.locationId);
   res.json({ ok: true });
+}));
+
+// GET /api/users/:id/public — публічна картка користувача
+router.get('/:id/public', requireAuth, wrap(async (req, res) => {
+  const u = await prisma.user.findUnique({
+    where: { id: req.params.id },
+    include: { roles: true },
+  });
+  if (!u) return res.status(404).json({ error: 'Користувача не знайдено' });
+
+  const [articlesCount, commentsCount, suggestionsCount] = await Promise.all([
+    prisma.article.count({ where: { authorId: u.id } }),
+    prisma.comment.count({ where: { authorId: u.id } }),
+    prisma.suggestion.count({ where: { authorId: u.id } }),
+  ]);
+
+  res.json({
+    id: u.id,
+    name: u.name,
+    surname: u.surname || null,
+    avatarUrl: u.avatarUrl || null,
+    rating: u.rating ?? 0,
+    roles: roleList(u),
+    createdAt: u.createdAt instanceof Date ? u.createdAt.getTime() : u.createdAt,
+    articlesCount,
+    commentsCount,
+    suggestionsCount,
+  });
 }));
 
 export default router;

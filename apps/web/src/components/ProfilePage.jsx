@@ -3,6 +3,7 @@ import { User, Lock, MapPin, Camera, Check, AlertCircle, Trash2, Fingerprint, Pl
 import { apiPatch, apiPost, apiDelete, apiUpload, webauthnRegister, webauthnSupported } from '../api';
 import { userRoles } from '../roles';
 import { useRoles } from '../RolesContext';
+import { accountLevel } from '../level';
 
 function Banner({ error, success }) {
   if (error) return <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded flex gap-2"><AlertCircle className="w-4 h-4 mt-0.5" />{error}</div>;
@@ -108,10 +109,14 @@ function PersonalSection({ user, allLocations, onRefresh }) {
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white border border-stone-200 rounded-lg p-4 text-center">
           <div className="flex items-center justify-center gap-1 text-amber-500 mb-1"><Star className="w-4 h-4" /><span className="text-2xl text-stone-800">{user.rating ?? 0}</span></div>
           <div className="text-xs text-stone-500">Рейтинг</div>
+        </div>
+        <div className="bg-white border border-stone-200 rounded-lg p-4 text-center">
+          <div className="text-sm text-stone-800 mt-1">{accountLevel(user.rating)}</div>
+          <div className="text-xs text-stone-500 mt-1">Рівень</div>
         </div>
         <div className="bg-white border border-stone-200 rounded-lg p-4 text-center">
           <div className="text-sm mt-1">{user.approved
