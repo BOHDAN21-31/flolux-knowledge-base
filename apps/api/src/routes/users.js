@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { requireAuth, publicUser } from '../auth.js';
-import { wrap, logAction, roleList, isAdmin, restrictedRoleKeys } from '../lib.js';
+import { wrap, logAction, roleList, isAdmin, isSenior, restrictedRoleKeys } from '../lib.js';
 import { serializeArticle } from '../serialize.js';
 
 const router = Router();
@@ -283,6 +283,7 @@ router.get('/:id/public', requireAuth, wrap(async (req, res) => {
 router.get('/me/home-data', requireAuth, wrap(async (req, res) => {
   const uid = req.user.id;
   const admin = isAdmin(req.user);
+  const senior = isSenior(req.user); // admin|hr — увесь контент (HR без чужих чернеток)
   const now = new Date();
   const inc = { author: true, locations: { include: { location: true } } };
 
@@ -315,17 +316,20 @@ router.get('/me/home-data', requireAuth, wrap(async (req, res) => {
   let popular = [];
   if (viewGroups.length) {
     const where = { id: { in: viewGroups.map((g) => g.articleId) } };
-    if (!admin) {
+    const liveOnly = { status: 'published', OR: [{ publishAt: null }, { publishAt: { lte: now } }] };
+    if (!senior) {
       const links = await prisma.userLocation.findMany({ where: { userId: uid, approved: true }, select: { locationId: true } });
       const locIds = links.map((l) => l.locationId);
       where.AND = [
         { OR: [{ locations: { none: {} } }, { locations: { some: { locationId: { in: locIds } } } }] },
-        { status: 'published', OR: [{ publishAt: null }, { publishAt: { lte: now } }] },
+        liveOnly,
       ];
+    } else if (!admin) {
+      where.AND = [liveOnly]; // HR: усі локації/ролі, але не чужі чернетки
     }
     const arts = await prisma.article.findMany({ where, include: { ...inc, topic: { select: { roleKey: true } } } });
     let list = arts;
-    if (!admin) {
+    if (!senior) {
       const restricted = await restrictedRoleKeys();
       const mine = new Set(roleList(req.user));
       list = arts.filter((a) => { const rk = a.topic?.roleKey; return !rk || !restricted.has(rk) || mine.has(rk); });

@@ -1,14 +1,14 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
-import { requireAuth, requireAdmin } from '../auth.js';
+import { requireAuth, requireSenior } from '../auth.js';
 import { serializeSuggestion } from '../serialize.js';
 import { wrap, logAction } from '../lib.js';
 import { notifySuggestionApproved } from '../services/notifications.js';
 
 const router = Router();
 
-// GET /api/suggestions?status=pending — для модерації (admin), відсортовано за рейтингом
-router.get('/', requireAuth, requireAdmin, wrap(async (req, res) => {
+// GET /api/suggestions?status=pending — для модерації (senior=admin|hr), за рейтингом
+router.get('/', requireAuth, requireSenior, wrap(async (req, res) => {
   const where = req.query.status ? { status: String(req.query.status) } : {};
   const suggestions = await prisma.suggestion.findMany({
     where,
@@ -67,8 +67,8 @@ router.post('/:id/rate', requireAuth, wrap(async (req, res) => {
   res.json(serializeSuggestion(updated, req.user.id));
 }));
 
-// PATCH /api/suggestions/:id  { status } — admin
-router.patch('/:id', requireAuth, requireAdmin, wrap(async (req, res) => {
+// PATCH /api/suggestions/:id  { status } — senior=admin|hr (actorId логуємо)
+router.patch('/:id', requireAuth, requireSenior, wrap(async (req, res) => {
   const { status } = req.body || {};
   if (!['approved', 'rejected', 'pending'].includes(status)) {
     return res.status(400).json({ error: 'Невідомий статус' });

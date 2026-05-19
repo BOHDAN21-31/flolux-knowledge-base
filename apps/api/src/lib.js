@@ -26,6 +26,13 @@ export const roleList = (u) =>
 // admin, якщо є роль 'admin' АБО (зворотна сумісність) assignedRole === 'admin'.
 export const isAdmin = (u) => roleList(u).includes('admin') || u?.assignedRole === 'admin';
 
+// "Senior" = admin або hr. Повний доступ до КОНТЕНТУ, але БЕЗ керування
+// користувачами/системою та БЕЗ доступу до PII (email/phone/passwordHash).
+export const isSenior = (u) => isAdmin(u) || roleList(u).includes('hr');
+export const canSeeUserPII = (u) => isAdmin(u);   // email, phone, address
+export const canManageUsers = (u) => isAdmin(u);  // reset-password, delete, ролі
+export const canManageSystem = (u) => isAdmin(u); // ролі/локації CRUD
+
 // Чи існує роль із таким ключем (валідація замість хардкоду ROLE_KEYS).
 export const roleExists = async (key) =>
   !!key && !!(await prisma.role.findUnique({ where: { key: String(key) } }));

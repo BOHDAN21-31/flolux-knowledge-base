@@ -9,6 +9,7 @@ import compression from 'compression';
 
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
+import seniorRoutes from './routes/senior.js';
 import topicRoutes from './routes/topics.js';
 import articleRoutes from './routes/articles.js';
 import suggestionRoutes from './routes/suggestions.js';
@@ -37,6 +38,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth/webauthn', webauthnRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/senior', seniorRoutes);
 app.use('/api/topics', topicRoutes);
 app.use('/api/articles', articleRoutes);
 app.use('/api/suggestions', suggestionRoutes);

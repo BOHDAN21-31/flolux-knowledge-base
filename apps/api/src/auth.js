@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { prisma } from './db.js';
-import { isAdmin, roleList } from './lib.js';
+import { isAdmin, isSenior, roleList } from './lib.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'flolux-dev-secret-change-me';
 const JWT_EXPIRES = '30d';
@@ -52,6 +52,15 @@ export async function requireAuth(req, res, next) {
 export function requireAdmin(req, res, next) {
   if (!req.user || !isAdmin(req.user)) {
     return res.status(403).json({ error: 'Доступ лише для адміністратора' });
+  }
+  next();
+}
+
+// Senior gate (admin або hr). Анти-tampering: ролі беремо з БД (req.user),
+// а не з JWT-пейлоада — requireAuth завжди перечитує користувача з include:{roles}.
+export function requireSenior(req, res, next) {
+  if (!req.user || !isSenior(req.user)) {
+    return res.status(403).json({ error: 'Доступ лише для HR або адміністратора' });
   }
   next();
 }

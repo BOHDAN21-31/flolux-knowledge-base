@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { wrap, isAdmin } from '../lib.js';
+import { wrap, isSenior } from '../lib.js';
 
 const router = Router();
 
@@ -29,9 +29,9 @@ router.get('/', requireAuth, wrap(async (req, res) => {
 }));
 
 // GET /api/locations/:id/users — працівники локації
-// видно admin або підтвердженому учаснику цієї локації
+// видно senior=admin|hr (read-only) або підтвердженому учаснику цієї локації
 router.get('/:id/users', requireAuth, wrap(async (req, res) => {
-  if (!isAdmin(req.user)) {
+  if (!isSenior(req.user)) {
     const member = await prisma.userLocation.findUnique({
       where: { userId_locationId: { userId: req.user.id, locationId: req.params.id } },
     });

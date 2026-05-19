@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { serializeArticle, serializeComment, serializeSuggestion } from '../serialize.js';
-import { wrap, isAdmin, logAction, roleList, restrictedRoleKeys } from '../lib.js';
+import { wrap, isAdmin, isSenior, logAction, roleList, restrictedRoleKeys } from '../lib.js';
 import { notifyNewArticle, notifyComment, notifySuggestion, checkScheduledPublishing } from '../services/notifications.js';
 
 const asJsonArray = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : undefined);
@@ -83,8 +83,8 @@ router.get('/', requireAuth, wrap(async (req, res) => {
     ];
   }
 
-  // Контроль доступу за локаціями (admin бачить усе). AND із фільтрами вище.
-  if (!isAdmin(req.user)) {
+  // Контроль доступу за локаціями (senior=admin|hr бачить усі локації).
+  if (!isSenior(req.user)) {
     const locIds = await approvedLocationIds(req.user.id);
     where.AND = [
       ...(where.AND || []),
@@ -118,8 +118,9 @@ router.get('/', requireAuth, wrap(async (req, res) => {
   });
 
   // P6: приховати статті обмежених ролей від тих, кому роль не призначена
+  // (senior=admin|hr бачить контент усіх ролей).
   let list = articles;
-  if (!isAdmin(req.user)) {
+  if (!isSenior(req.user)) {
     const restricted = await restrictedRoleKeys();
     const mine = new Set(roleList(req.user));
     list = articles.filter((a) => {
@@ -150,19 +151,22 @@ router.get('/popular', requireAuth, wrap(async (req, res) => {
   if (ids.length === 0) return res.json([]);
 
   const where = { id: { in: ids } };
-  if (!isAdmin(req.user)) {
+  if (!isSenior(req.user)) {
     const locIds = await approvedLocationIds(req.user.id);
     where.AND = [
       { OR: [{ locations: { none: {} } }, { locations: { some: { locationId: { in: locIds } } } }] },
       statusVisibility(),
     ];
+  } else if (!isAdmin(req.user)) {
+    // HR: усі локації/ролі, але не чужі чернетки
+    where.AND = [statusVisibility()];
   }
   const articles = await prisma.article.findMany({
     where,
     include: { ...articleInclude, topic: { select: { roleKey: true } } },
   });
   let list = articles;
-  if (!isAdmin(req.user)) {
+  if (!isSenior(req.user)) {
     const restricted = await restrictedRoleKeys();
     const mine = new Set(roleList(req.user));
     list = articles.filter((a) => {
@@ -187,10 +191,11 @@ router.get('/by-ids', requireAuth, wrap(async (req, res) => {
     include: { ...articleInclude, topic: { select: { roleKey: true } } },
   });
   const admin = isAdmin(req.user);
+  const senior = isSenior(req.user);
   let locIds = [];
   let restricted = new Set();
   let mine = new Set();
-  if (!admin) {
+  if (!senior) {
     locIds = await approvedLocationIds(req.user.id);
     restricted = await restrictedRoleKeys();
     mine = new Set(roleList(req.user));
@@ -200,7 +205,8 @@ router.get('/by-ids', requireAuth, wrap(async (req, res) => {
     if (admin) return true;
     const isAuthor = a.authorId === req.user.id;
     const live = a.status === 'published' && (!a.publishAt || new Date(a.publishAt).getTime() <= now);
-    if (!live && !isAuthor) return false;
+    if (!live && !isAuthor) return false; // чужі чернетки — не для HR
+    if (senior) return true;              // HR: усі локації/ролі
     if (a.locations.length > 0 && !a.locations.some((al) => locIds.includes(al.locationId)) && !isAuthor) return false;
     const rk = a.topic?.roleKey;
     if (rk && restricted.has(rk) && !mine.has(rk) && !isAuthor) return false;
@@ -224,14 +230,15 @@ router.get('/:id', requireAuth, wrap(async (req, res) => {
 
   const isAuthor = article.authorId === req.user.id;
   const adminUser = isAdmin(req.user);
-  // Чернетку / незаплановану-ще бачить лише автор або admin
+  const seniorUser = isSenior(req.user);
+  // Чернетку / незаплановану-ще бачить лише автор або admin (НЕ HR — особиста справа)
   const notLive = article.status === 'draft'
     || (article.publishAt && new Date(article.publishAt).getTime() > Date.now());
   if (notLive && !isAuthor && !adminUser) {
     return res.status(404).json({ error: 'Статтю не знайдено' });
   }
 
-  if (!adminUser) {
+  if (!seniorUser) {
     // Перевірка доступу за локаціями
     if (article.locations.length > 0) {
       const locIds = await approvedLocationIds(req.user.id);
@@ -373,11 +380,11 @@ router.post('/', requireAuth, wrap(async (req, res) => {
   res.json(serializeArticle(article));
 }));
 
-// PATCH /api/articles/:id — автор або admin
+// PATCH /api/articles/:id — автор, admin або hr (senior)
 router.patch('/:id', requireAuth, wrap(async (req, res) => {
   const existing = await prisma.article.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: 'Статтю не знайдено' });
-  if (existing.authorId !== req.user.id && !isAdmin(req.user)) {
+  if (existing.authorId !== req.user.id && !isSenior(req.user)) {
     return res.status(403).json({ error: 'Немає прав на редагування' });
   }
   const data = {};
@@ -425,15 +432,15 @@ router.patch('/:id', requireAuth, wrap(async (req, res) => {
   res.json(serializeArticle(article));
 }));
 
-// DELETE /api/articles/:id — автор або admin
+// DELETE /api/articles/:id — автор, admin або hr (senior)
 router.delete('/:id', requireAuth, wrap(async (req, res) => {
   const existing = await prisma.article.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: 'Статтю не знайдено' });
-  if (existing.authorId !== req.user.id && !isAdmin(req.user)) {
+  if (existing.authorId !== req.user.id && !isSenior(req.user)) {
     return res.status(403).json({ error: 'Немає прав на видалення' });
   }
   await prisma.article.delete({ where: { id: req.params.id } });
-  if (isAdmin(req.user)) {
+  if (isSenior(req.user)) {
     await logAction(req.user.id, 'article.deleted', 'article', req.params.id, { title: existing.title });
   }
   res.json({ ok: true });

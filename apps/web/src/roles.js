@@ -9,3 +9,7 @@ export const userRoles = (u) => {
 };
 
 export const isAdminUser = (u) => userRoles(u).includes('admin');
+
+// Senior = admin або hr. Повний доступ до КОНТЕНТУ, але БЕЗ керування
+// користувачами/системою та БЕЗ PII (email/phone) — це лише admin.
+export const isSeniorUser = (u) => isAdminUser(u) || userRoles(u).includes('hr');

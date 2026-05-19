@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth, requireHrOrAdmin } from '../auth.js';
 import { serializeArticle } from '../serialize.js';
-import { wrap, roleList } from '../lib.js';
+import { wrap, roleList, logAction } from '../lib.js';
 import { notifyDigest } from '../services/notifications.js';
 
 const router = Router();
@@ -60,6 +60,7 @@ router.post('/', requireAuth, requireHrOrAdmin, wrap(async (req, res) => {
     include: articleInclude,
   });
 
+  await logAction(req.user.id, 'digest.created', 'article', article.id, { title, draft: isDraft });
   if (!isDraft) await notifyDigest(article, req.user);
   res.json(serializeArticle(article));
 }));

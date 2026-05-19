@@ -1,13 +1,19 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
-import { publicUser, requireAuth, requireAdmin, requireHrOrAdmin } from '../auth.js';
-import { wrap, logAction, syncPrimaryRole, slugify, roleExists } from '../lib.js';
+import { publicUser, requireAuth, requireAdmin, requireSenior, requireHrOrAdmin } from '../auth.js';
+import { wrap, logAction, syncPrimaryRole, slugify, roleExists, isAdmin } from '../lib.js';
 import { serializeLocation } from './locations.js';
 import { serializeRole } from './roles.js';
 import { notifyRoleAssigned, notifyLocationApproved } from '../services/notifications.js';
 
 const router = Router();
+
+const adminName = (u) => `${u.name}${u.surname ? ' ' + u.surname : ''}`;
+
+// Контент-події, видимі HR у журналі. Admin бачить усе.
+const SENIOR_AUDIT_PREFIXES = ['article.', 'suggestion.', 'topic.', 'digest.'];
+const seniorAuditOnly = () => ({ OR: SENIOR_AUDIT_PREFIXES.map((p) => ({ action: { startsWith: p } })) });
 
 // ===== Дні народження (HR/admin) — оголошено ДО глобального requireAdmin =====
 router.patch('/users/:id/birthday', requireAuth, requireHrOrAdmin, wrap(async (req, res) => {
@@ -43,9 +49,113 @@ router.get('/birthday-list', requireAuth, requireHrOrAdmin, wrap(async (req, res
   })));
 }));
 
-router.use(requireAuth, requireAdmin);
+// ===== Senior (admin|hr): повний доступ до КОНТЕНТУ — ДО глобального requireAdmin.
+//       PII користувачів сюди не потрапляє. HR-журнал — лише контент-події. =====
 
-const adminName = (u) => `${u.name}${u.surname ? ' ' + u.surname : ''}`;
+// POST /api/admin/articles/bulk { action: 'delete' | 'move', ids, targetTopicId }
+router.post('/articles/bulk', requireAuth, requireSenior, wrap(async (req, res) => {
+  const { action, targetTopicId } = req.body || {};
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((x) => typeof x === 'string') : [];
+  if (!ids.length) return res.status(400).json({ error: 'Не вибрано статей' });
+
+  if (action === 'delete') {
+    await prisma.article.deleteMany({ where: { id: { in: ids } } });
+    await logAction(req.user.id, 'article.bulk_deleted', 'article', null, { ids });
+    return res.json({ ok: true, count: ids.length });
+  }
+  if (action === 'move') {
+    const topic = await prisma.topic.findUnique({ where: { id: String(targetTopicId || '') } });
+    if (!topic) return res.status(400).json({ error: 'Невідомий цільовий розділ' });
+    const section = topic.id.startsWith('tc-') ? 'tech' : 'role';
+    await prisma.article.updateMany({ where: { id: { in: ids } }, data: { topicId: topic.id, section } });
+    await logAction(req.user.id, 'article.bulk_moved', 'article', null, { ids, targetTopicId: topic.id });
+    return res.json({ ok: true, count: ids.length });
+  }
+  res.status(400).json({ error: 'Невідома дія' });
+}));
+
+// GET /api/admin/stats — дашборд (senior). Без PII; для HR журнал — лише контент.
+router.get('/stats', requireAuth, requireSenior, wrap(async (req, res) => {
+  const auditWhere = isAdmin(req.user) ? {} : seniorAuditOnly();
+  const [usersTotal, usersPending, articles, comments, suggestionsPending, roleGroups, recentUsers, recentAudit] =
+    await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { approved: false } }),
+      prisma.article.count(),
+      prisma.comment.count(),
+      prisma.suggestion.count({ where: { status: 'pending' } }),
+      prisma.userRole.groupBy({ by: ['role'], _count: { _all: true } }),
+      prisma.user.findMany({
+        where: { createdAt: { gte: new Date(Date.now() - 30 * 864e5) } },
+        select: { createdAt: true },
+      }),
+      prisma.auditLog.findMany({
+        where: auditWhere,
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        include: { actor: { select: { name: true, surname: true } } },
+      }),
+    ]);
+
+  const byDay = {};
+  for (const u of recentUsers) {
+    const k = u.createdAt.toISOString().slice(0, 10);
+    byDay[k] = (byDay[k] || 0) + 1;
+  }
+  const registrations = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+    registrations.push({ date: d, count: byDay[d] || 0 });
+  }
+
+  res.json({
+    usersTotal,
+    usersPending,
+    articles,
+    comments,
+    suggestionsPending,
+    byRole: Object.fromEntries(roleGroups.map((g) => [g.role, g._count._all])),
+    registrations,
+    recentAudit: recentAudit.map((a) => ({
+      id: a.id,
+      action: a.action,
+      targetType: a.targetType,
+      targetId: a.targetId,
+      actorName: a.actor ? adminName(a.actor) : '—',
+      createdAt: a.createdAt.getTime(),
+    })),
+  });
+}));
+
+// GET /api/admin/audit-log — журнал (senior). HR бачить лише контент-події
+// (server-enforced: фільтр не залежить від клієнтських параметрів).
+router.get('/audit-log', requireAuth, requireSenior, wrap(async (req, res) => {
+  const and = [];
+  if (req.query.actor) and.push({ actorId: String(req.query.actor) });
+  if (req.query.action) and.push({ action: { contains: String(req.query.action) } });
+  if (!isAdmin(req.user)) and.push(seniorAuditOnly());
+  const where = and.length ? { AND: and } : {};
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+
+  const logs = await prisma.auditLog.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    include: { actor: { select: { name: true, surname: true } } },
+  });
+  res.json(logs.map((a) => ({
+    id: a.id,
+    actorId: a.actorId,
+    actorName: a.actor ? adminName(a.actor) : '—',
+    action: a.action,
+    targetType: a.targetType,
+    targetId: a.targetId,
+    metadata: a.metadata || null,
+    createdAt: a.createdAt.getTime(),
+  })));
+}));
+
+router.use(requireAuth, requireAdmin);
 
 // Кількість користувачів-адмінів (за UserRole). Захист від видалення останнього.
 const adminCount = () => prisma.userRole.count({ where: { role: 'admin' } });
@@ -195,84 +305,6 @@ router.post('/users/:id/reset-password', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ===== Дашборд / статистика =====
-
-router.get('/stats', wrap(async (req, res) => {
-  const [usersTotal, usersPending, articles, comments, suggestionsPending, roleGroups, recentUsers, recentAudit] =
-    await Promise.all([
-      prisma.user.count(),
-      prisma.user.count({ where: { approved: false } }),
-      prisma.article.count(),
-      prisma.comment.count(),
-      prisma.suggestion.count({ where: { status: 'pending' } }),
-      prisma.userRole.groupBy({ by: ['role'], _count: { _all: true } }),
-      prisma.user.findMany({
-        where: { createdAt: { gte: new Date(Date.now() - 30 * 864e5) } },
-        select: { createdAt: true },
-      }),
-      prisma.auditLog.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-        include: { actor: { select: { name: true, surname: true } } },
-      }),
-    ]);
-
-  const byDay = {};
-  for (const u of recentUsers) {
-    const k = u.createdAt.toISOString().slice(0, 10);
-    byDay[k] = (byDay[k] || 0) + 1;
-  }
-  const registrations = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
-    registrations.push({ date: d, count: byDay[d] || 0 });
-  }
-
-  res.json({
-    usersTotal,
-    usersPending,
-    articles,
-    comments,
-    suggestionsPending,
-    byRole: Object.fromEntries(roleGroups.map((g) => [g.role, g._count._all])),
-    registrations,
-    recentAudit: recentAudit.map((a) => ({
-      id: a.id,
-      action: a.action,
-      targetType: a.targetType,
-      targetId: a.targetId,
-      actorName: a.actor ? adminName(a.actor) : '—',
-      createdAt: a.createdAt.getTime(),
-    })),
-  });
-}));
-
-// ===== Журнал дій =====
-
-router.get('/audit-log', wrap(async (req, res) => {
-  const where = {};
-  if (req.query.actor) where.actorId = String(req.query.actor);
-  if (req.query.action) where.action = { contains: String(req.query.action) };
-  const limit = Math.min(Number(req.query.limit) || 50, 200);
-
-  const logs = await prisma.auditLog.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    take: limit,
-    include: { actor: { select: { name: true, surname: true } } },
-  });
-  res.json(logs.map((a) => ({
-    id: a.id,
-    actorId: a.actorId,
-    actorName: a.actor ? adminName(a.actor) : '—',
-    action: a.action,
-    targetType: a.targetType,
-    targetId: a.targetId,
-    metadata: a.metadata || null,
-    createdAt: a.createdAt.getTime(),
-  })));
-}));
-
 // ===== Запити ролей (pending requestedRole) =====
 
 router.get('/role-requests', wrap(async (req, res) => {
@@ -288,30 +320,6 @@ router.get('/role-requests', wrap(async (req, res) => {
     requestedRole: u.requestedRole,
     createdAt: u.createdAt.getTime(),
   })));
-}));
-
-// ===== Контент: масові дії над статтями =====
-
-// POST /api/admin/articles/bulk { action: 'delete' | 'move', ids: [], targetTopicId }
-router.post('/articles/bulk', wrap(async (req, res) => {
-  const { action, targetTopicId } = req.body || {};
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((x) => typeof x === 'string') : [];
-  if (!ids.length) return res.status(400).json({ error: 'Не вибрано статей' });
-
-  if (action === 'delete') {
-    await prisma.article.deleteMany({ where: { id: { in: ids } } });
-    await logAction(req.user.id, 'article.bulk_deleted', 'article', null, { ids });
-    return res.json({ ok: true, count: ids.length });
-  }
-  if (action === 'move') {
-    const topic = await prisma.topic.findUnique({ where: { id: String(targetTopicId || '') } });
-    if (!topic) return res.status(400).json({ error: 'Невідомий цільовий розділ' });
-    const section = topic.id.startsWith('tc-') ? 'tech' : 'role';
-    await prisma.article.updateMany({ where: { id: { in: ids } }, data: { topicId: topic.id, section } });
-    await logAction(req.user.id, 'article.bulk_moved', 'article', null, { ids, targetTopicId: topic.id });
-    return res.json({ ok: true, count: ids.length });
-  }
-  res.status(400).json({ error: 'Невідома дія' });
 }));
 
 // ===== Запити локацій =====

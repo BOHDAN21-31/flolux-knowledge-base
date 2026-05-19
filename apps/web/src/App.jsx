@@ -11,7 +11,7 @@ import NotificationBell from './components/NotificationBell';
 import NotificationsPage from './components/NotificationsPage';
 import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
 import Stars from './Stars';
-import { userRoles, isAdminUser } from './roles';
+import { userRoles, isAdminUser, isSeniorUser } from './roles';
 import { RolesProvider, useRoles } from './RolesContext';
 import { iconFor } from './icons';
 import { useTheme } from './theme';
@@ -212,8 +212,8 @@ function AppInner() {
   if (!dataLoaded) return <Splash text="Готуємо вашу базу знань..." />;
 
   const isAdmin = isAdminUser(currentUser);
-  const isHr = userRoles(currentUser).includes('hr');
-  const canAdminArea = isAdmin || isHr;
+  const isSenior = isSeniorUser(currentUser); // admin|hr — повний доступ до контенту
+  const canAdminArea = isSenior;
 
   const allTopics = Object.values(topicsMap).flat();
   const topicById = (id) => allTopics.find((t) => t.id === id) || null;
@@ -231,6 +231,7 @@ function AppInner() {
         articles={articles}
         allLocations={allLocations}
         isAdmin={isAdmin}
+        isSenior={isSenior}
         onTopicClick={(t) => push({ type: 'topic', topicId: t.id })}
         onArticleClick={(a) => push({ type: 'article', articleId: a.id })}
         onOpenUser={(id) => push({ type: 'publicProfile', userId: id })}
@@ -278,8 +279,9 @@ function AppInner() {
         reloadLocations={reloadLocations}
         reloadArticles={reloadArticles}
         isAdmin={isAdmin}
-        tab={current.tab || (isAdmin ? 'dashboard' : 'birthdays')}
+        tab={current.tab || 'dashboard'}
         onTab={(t) => reset({ type: 'admin', tab: t })}
+        onOpenUser={(id) => id && push({ type: 'publicProfile', userId: id })}
         onCreateDigest={() => push({ type: 'createDigest' })}
       />
     );
@@ -300,6 +302,7 @@ function AppInner() {
         articleId={current.articleId}
         user={currentUser}
         isAdmin={isAdmin}
+        isSenior={isSenior}
         onBack={back}
         onEdit={() => push({ type: 'editArticle', articleId: current.articleId })}
         onArticleUpdated={reloadArticles}
@@ -645,9 +648,9 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, canAdmin
 
           {/* Desktop nav (на мобільному дублює bottom-nav — приховано) */}
           <nav className="hidden md:flex items-center gap-1">
-            <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{isAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</NavBtn>
+            <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{canAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</NavBtn>
             <NavBtn active={view === 'tech'} onClick={() => onNavigate('tech')} icon={Wrench}>Технічка</NavBtn>
-            {canAdmin && <NavBtn active={view === 'admin'} onClick={() => onNavigate('admin')} icon={Shield}>{isAdmin ? 'Адмін' : 'HR'}</NavBtn>}
+            {canAdmin && <NavBtn active={view === 'admin'} onClick={() => onNavigate('admin')} icon={Shield}>{isAdmin ? 'Адмін' : 'Керування'}</NavBtn>}
           </nav>
         </div>
 
@@ -712,7 +715,7 @@ function MobileBottomNav({ view, isAdmin, canAdmin, onNavigate, onProfile }) {
     { key: 'tech', label: 'Технічка', icon: Wrench, onClick: () => onNavigate('tech') },
     { key: 'profile', label: 'Профіль', icon: User, onClick: onProfile },
   ];
-  if (canAdmin) items.push({ key: 'admin', label: isAdmin ? 'Адмін' : 'HR', icon: Shield, onClick: () => onNavigate('admin') });
+  if (canAdmin) items.push({ key: 'admin', label: isAdmin ? 'Адмін' : 'Керування', icon: Shield, onClick: () => onNavigate('admin') });
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 flex"
@@ -741,7 +744,7 @@ function FilterChip({ label, onRemove }) {
   );
 }
 
-function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicClick, onArticleClick, onOpenUser, onGoProfile }) {
+function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior = isAdmin, onTopicClick, onArticleClick, onOpenUser, onGoProfile }) {
   const { roleName, roleKeys, roleChipStyle, byKey } = useRoles();
   const roles = userRoles(user);
   const [roleFilter, setRoleFilter] = useState('all');
@@ -786,7 +789,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
     return () => { active = false; };
   }, []);
 
-  if (!isAdmin && roles.length === 0) {
+  if (!isSenior && roles.length === 0) {
     return (
       <div className="text-center py-16">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-50 mb-4">
@@ -801,9 +804,9 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
     );
   }
 
-  // admin — усі ролі; інші — свої, + (за toggle) усі публічні (не restricted).
+  // senior (admin|hr) — усі ролі; інші — свої, + (за toggle) усі публічні.
   const publicRoles = roleKeys.filter((k) => !byKey[k]?.restricted);
-  const baseRoles = isAdmin
+  const baseRoles = isSenior
     ? roleKeys
     : (showAllPublic ? [...new Set([...roles, ...publicRoles])] : roles);
   const shownRoles = (roleFilter === 'all' ? baseRoles : [roleFilter]).filter((r) => (topics[r] || []).length > 0);
@@ -825,7 +828,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
     return null;
   };
   const roleOptions = baseRoles;
-  const locOptions = isAdmin ? allLocations : allLocations.filter((l) => approved.some((ap) => ap.locationId === l.id));
+  const locOptions = isSenior ? allLocations : allLocations.filter((l) => approved.some((ap) => ap.locationId === l.id));
   const toggleIn = (arr, set, v) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   const filtersActive = !!q.trim() || selRoles.length > 0 || selLocs.length > 0;
 
@@ -865,7 +868,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
           {Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>Сортувати: {v}</option>)}
         </select>
       </div>
-      {!isAdmin && publicRoles.length > roles.length && (
+      {!isSenior && publicRoles.length > roles.length && (
         <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300 mt-3">
           <input type="checkbox" className="w-4 h-4" checked={showAllPublic} onChange={(e) => setShowAllPublic(e.target.checked)} />
           Показати всі публічні ролі
@@ -907,7 +910,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
         <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">Вітаємо</p>
         <h1 className="text-3xl md:text-4xl text-stone-800 dark:text-stone-100 mb-2">{user.name}</h1>
         <p className="text-stone-500 dark:text-stone-400 italic">
-          {isAdmin ? 'Уся бібліотека знань Flolux' : `Ваші ролі — ${roles.map(roleName).join(', ').toLowerCase()}`}
+          {isSenior ? 'Уся бібліотека знань Flolux' : `Ваші ролі — ${roles.map(roleName).join(', ').toLowerCase()}`}
         </p>
       </div>
 
@@ -1126,7 +1129,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
 
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xs uppercase tracking-widest text-stone-400">
-              {isAdmin ? 'Усі розділи знань' : 'Розділи знань для ваших ролей'}
+              {isSenior ? 'Усі розділи знань' : 'Розділи знань для ваших ролей'}
             </h2>
             {baseRoles.length > 1 && (
               <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
@@ -1315,7 +1318,7 @@ function TopicView({ topic, articles, onBack, onArticleClick, onCreate }) {
 }
 
 // ============ СТАТТЯ ============
-function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdated, onOpenUser }) {
+function ArticleView({ articleId, user, isAdmin, isSenior = isAdmin, onBack, onEdit, onArticleUpdated, onOpenUser }) {
   const { roleName, roleChipStyle } = useRoles();
   const confirm = useConfirm();
   const [article, setArticle] = useState(null);
@@ -1387,7 +1390,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
 
   const comments = article?.comments || [];
   const suggestions = article?.suggestions || [];
-  const canEdit = !!article && (isAdmin || article.author === user.id);
+  const canEdit = !!article && (isSenior || article.author === user.id);
 
   const handleComment = async () => {
     if (!commentText.trim()) return;
@@ -1607,7 +1610,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
                   <div className="flex items-center gap-2">
                     {s.status === 'approved' && <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded">Прийнято</span>}
                     {s.status === 'rejected' && <span className="text-xs px-2 py-0.5 bg-rose-100 text-rose-700 rounded">Відхилено</span>}
-                    {s.status === 'pending' && isAdmin && (
+                    {s.status === 'pending' && isSenior && (
                       <>
                         <button onClick={() => setSuggStatus(s, 'approved')} className="w-10 h-10 flex items-center justify-center text-emerald-600 hover:text-emerald-700"><Check className="w-4 h-4" /></button>
                         <button onClick={() => setSuggStatus(s, 'rejected')} className="w-10 h-10 flex items-center justify-center text-rose-500 hover:text-rose-600"><X className="w-4 h-4" /></button>

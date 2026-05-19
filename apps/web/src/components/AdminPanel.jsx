@@ -11,25 +11,29 @@ import Stars from '../Stars';
 
 const fmtDate = (ms) => new Date(ms).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' });
 
-const ADMIN_NAV = [
-  { key: 'dashboard', label: 'Огляд', icon: LayoutDashboard },
-  { key: 'users', label: 'Користувачі', icon: Users },
-  { key: 'locations', label: 'Локації', icon: MapPin },
-  { key: 'requests', label: 'Запити', icon: Inbox },
-  { key: 'content', label: 'Контент', icon: BookOpen },
-  { key: 'topics', label: 'Розділи', icon: FileText },
-  { key: 'roles', label: 'Ролі', icon: Shield },
-  { key: 'moderation', label: 'Модерація', icon: MessageSquare },
-  { key: 'audit', label: 'Журнал дій', icon: ScrollText },
-];
-const HR_NAV = [
-  { key: 'birthdays', label: '🎂 Дні народження', icon: Cake },
-  { key: 'digests', label: '📢 Дайджести', icon: Megaphone },
-];
+// Вкладки залежно від рівня: admin — усі; senior(HR) — контент без
+// керування користувачами/системою (без Користувачів/Запитів/Ролей/Розділів).
+function buildNav(isAdmin) {
+  const nav = [{ key: 'dashboard', label: 'Огляд', icon: LayoutDashboard }];
+  if (isAdmin) nav.push({ key: 'users', label: 'Користувачі', icon: Users });
+  else nav.push({ key: 'employees', label: 'Працівники', icon: Users });
+  nav.push({ key: 'locations', label: 'Локації', icon: MapPin });
+  if (isAdmin) nav.push({ key: 'requests', label: 'Запити', icon: Inbox });
+  nav.push({ key: 'content', label: 'Контент', icon: BookOpen });
+  if (isAdmin) nav.push({ key: 'topics', label: 'Розділи', icon: FileText });
+  if (isAdmin) nav.push({ key: 'roles', label: 'Ролі', icon: Shield });
+  nav.push({ key: 'moderation', label: 'Модерація', icon: MessageSquare });
+  nav.push({ key: 'audit', label: 'Журнал дій', icon: ScrollText });
+  nav.push({ key: 'birthdays', label: '🎂 Дні народження', icon: Cake });
+  nav.push({ key: 'digests', label: '📢 Дайджести', icon: Megaphone });
+  return nav;
+}
 
-export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, isAdmin = true, tab: tabProp, onTab, onCreateDigest }) {
-  const NAV = isAdmin ? [...ADMIN_NAV, ...HR_NAV] : HR_NAV;
-  const tab = tabProp || (isAdmin ? 'dashboard' : 'birthdays');
+export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, isAdmin = true, tab: tabProp, onTab, onOpenUser, onCreateDigest }) {
+  const NAV = buildNav(isAdmin);
+  // Захист: HR не може потрапити на admin-only вкладку через URL — fallback на дозволену.
+  const allowed = NAV.map((n) => n.key);
+  const tab = allowed.includes(tabProp) ? tabProp : 'dashboard';
   const setTab = (t) => onTab?.(t);
 
   return (
@@ -69,16 +73,17 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
         </aside>
 
         <div className="flex-1 min-w-0">
-          {tab === 'dashboard' && <Dashboard onJump={setTab} />}
-          {tab === 'users' && <UsersTab allLocations={allLocations} />}
-          {tab === 'locations' && <LocationsTab allLocations={allLocations} reloadLocations={reloadLocations} />}
-          {tab === 'requests' && <RequestsTab reloadLocations={reloadLocations} />}
+          {tab === 'dashboard' && <Dashboard onJump={setTab} isAdmin={isAdmin} />}
+          {tab === 'users' && isAdmin && <UsersTab allLocations={allLocations} />}
+          {tab === 'employees' && !isAdmin && <EmployeesTab allLocations={allLocations} onOpenUser={onOpenUser} />}
+          {tab === 'locations' && <LocationsTab allLocations={allLocations} reloadLocations={reloadLocations} readOnly={!isAdmin} onOpenUser={onOpenUser} />}
+          {tab === 'requests' && isAdmin && <RequestsTab reloadLocations={reloadLocations} />}
           {tab === 'content' && (
             <ContentTab articles={articles} topicsMap={topicsMap} allLocations={allLocations}
               reloadArticles={reloadArticles} />
           )}
-          {tab === 'topics' && <TopicsTab topicsMap={topicsMap} reloadTopics={reloadTopics} />}
-          {tab === 'roles' && <RolesTab />}
+          {tab === 'topics' && isAdmin && <TopicsTab topicsMap={topicsMap} reloadTopics={reloadTopics} />}
+          {tab === 'roles' && isAdmin && <RolesTab />}
           {tab === 'moderation' && <ModerationTab articles={articles} />}
           {tab === 'audit' && <AuditTab />}
           {tab === 'birthdays' && <BirthdaysTab />}
@@ -94,7 +99,7 @@ function Card({ children, className = '' }) {
 }
 
 // ============ ОГЛЯД ============
-function Dashboard({ onJump }) {
+function Dashboard({ onJump, isAdmin = true }) {
   const { roleName, roleKeys, roleChipStyle } = useRoles();
   const [s, setS] = useState(null);
   const [err, setErr] = useState('');
@@ -108,7 +113,9 @@ function Dashboard({ onJump }) {
 
   const maxReg = Math.max(1, ...s.registrations.map((r) => r.count));
   const stat = [
-    { label: 'Користувачів', value: s.usersTotal, hint: `${s.usersPending} очікують`, to: 'users' },
+    isAdmin
+      ? { label: 'Користувачів', value: s.usersTotal, hint: `${s.usersPending} очікують`, to: 'users' }
+      : { label: 'Працівників', value: s.usersTotal, to: 'employees' },
     { label: 'Статей', value: s.articles, to: 'content' },
     { label: 'Коментарів', value: s.comments },
     { label: 'Пропозицій на модерації', value: s.suggestionsPending, to: 'moderation' },
@@ -166,6 +173,94 @@ function Dashboard({ onJump }) {
                 <span className="text-stone-700 dark:text-stone-200 break-words"><b className="text-stone-900">{a.actorName}</b> · <code className="text-xs text-rose-600">{a.action}</code> · {a.targetType}</span>
                 <span className="text-xs text-stone-400 flex-shrink-0">{fmtDate(a.createdAt)}</span>
               </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ============ ПРАЦІВНИКИ (HR, read-only, без PII) ============
+function EmployeesTab({ allLocations, onOpenUser }) {
+  const { roleName, roleKeys, roleChipStyle } = useRoles();
+  const [list, setList] = useState(null);
+  const [err, setErr] = useState('');
+  const [q, setQ] = useState('');
+  const [fRole, setFRole] = useState('');
+  const [fLoc, setFLoc] = useState('');
+
+  useEffect(() => {
+    apiGet('/api/senior/users').then(setList).catch((e) => setErr(e.message));
+  }, []);
+
+  if (err) return <Card className="p-6 text-rose-600 text-sm">{err}</Card>;
+  if (!list) return <Card className="p-8 text-center text-stone-400 italic">Завантаження…</Card>;
+
+  const ql = q.trim().toLowerCase();
+  const shown = list.filter((u) => {
+    const full = `${u.name} ${u.surname || ''}`.toLowerCase();
+    if (ql && !full.includes(ql)) return false;
+    if (fRole && !(u.roles || []).includes(fRole)) return false;
+    if (fLoc && !(u.locations || []).some((l) => l.locationId === fLoc)) return false;
+    return true;
+  });
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4 md:p-5">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук за іменем…"
+              className="w-full pl-9 pr-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-transparent" />
+          </div>
+          <select value={fRole} onChange={(e) => setFRole(e.target.value)}
+            className="px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-transparent">
+            <option value="">Усі ролі</option>
+            {roleKeys.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
+          </select>
+          <select value={fLoc} onChange={(e) => setFLoc(e.target.value)}
+            className="px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-transparent">
+            <option value="">Усі локації</option>
+            {allLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </div>
+      </Card>
+
+      <Card className="p-4 md:p-5">
+        <div className="text-xs uppercase tracking-wider text-stone-400 mb-3">Працівники ({shown.length})</div>
+        {shown.length === 0 ? <p className="text-sm text-stone-400 italic">Нікого не знайдено</p> : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {shown.map((u) => (
+              <button key={u.id} type="button" onClick={() => onOpenUser?.(u.id)}
+                className="text-left border border-stone-200 dark:border-stone-700 rounded-lg p-3 hover:border-rose-300 transition flex gap-3">
+                {u.avatarUrl
+                  ? <img src={u.avatarUrl} alt="" loading="lazy" className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
+                  : <span className="w-11 h-11 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-stone-500 dark:text-stone-300 flex-shrink-0">{(u.name || '?')[0]}</span>}
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-stone-800 dark:text-stone-100 truncate">
+                    {u.name}{u.surname ? ` ${u.surname}` : ''}
+                    {!u.approved && <span className="text-xs text-amber-600"> · очікує</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(u.roles || []).map((r) => (
+                      <span key={r} className="text-[10px] px-1.5 py-0.5 rounded-full border" style={roleChipStyle(r)}>{roleName(r)}</span>
+                    ))}
+                    {(u.roles || []).length === 0 && <span className="text-[10px] text-stone-400 italic">без ролі</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(u.locations || []).map((l) => (
+                      <span key={l.locationId} className="text-[10px] px-1.5 py-0.5 rounded text-white" style={{ background: l.color || '#a8a29e' }}>
+                        {l.name}{l.isManager ? ' ★' : ''}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="text-xs text-stone-400 mt-1">
+                    ⭐ {u.rating ?? 0}{u.birthday ? ` · 🎂 ${u.birthday}` : ''}
+                  </div>
+                </div>
+              </button>
             ))}
           </div>
         )}
@@ -492,7 +587,7 @@ function UserDetailModal({ id, onClose }) {
 // ============ ЛОКАЦІЇ ============
 const PRESET_CITIES = ['Київ', 'Львів', 'Івано-Франківськ', 'Рівне'];
 
-function LocationsTab({ allLocations, reloadLocations }) {
+function LocationsTab({ allLocations, reloadLocations, readOnly = false, onOpenUser }) {
   const confirm = useConfirm();
   const [error, setError] = useState('');
   const [openId, setOpenId] = useState(null);
@@ -545,9 +640,11 @@ function LocationsTab({ allLocations, reloadLocations }) {
       <Card className="p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg text-stone-800 dark:text-stone-100">Локації ({allLocations.length})</h3>
-          <button onClick={() => setAddOpen(true)} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
-            <Plus className="w-4 h-4" /> Додати
-          </button>
+          {!readOnly && (
+            <button onClick={() => setAddOpen(true)} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+              <Plus className="w-4 h-4" /> Додати
+            </button>
+          )}
         </div>
         {error && <div className="mb-3 p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
         {allLocations.length === 0 && <p className="text-sm text-stone-400 italic">Локацій ще немає</p>}
@@ -566,11 +663,19 @@ function LocationsTab({ allLocations, reloadLocations }) {
                         <ChevronRight className={`w-4 h-4 text-stone-300 transition flex-shrink-0 ${openId === l.id ? 'rotate-90' : ''}`} />
                       </button>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        <button onClick={() => toggleActive(l)} title={l.active === false ? 'Активувати' : 'Деактивувати'}
-                          className={`px-2 min-h-[36px] rounded text-xs border ${l.active === false ? 'border-stone-300 text-stone-500 dark:text-stone-400' : 'border-emerald-300 text-emerald-700 bg-emerald-50'}`}>
-                          {l.active === false ? 'Неактивна' : 'Активна'}
-                        </button>
-                        <button onClick={() => removeLocation(l.id)} className="w-9 h-9 flex items-center justify-center text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                        {readOnly ? (
+                          <span className={`px-2 min-h-[36px] flex items-center rounded text-xs border ${l.active === false ? 'border-stone-300 text-stone-500 dark:text-stone-400' : 'border-emerald-300 text-emerald-700 bg-emerald-50'}`}>
+                            {l.active === false ? 'Неактивна' : 'Активна'}
+                          </span>
+                        ) : (
+                          <>
+                            <button onClick={() => toggleActive(l)} title={l.active === false ? 'Активувати' : 'Деактивувати'}
+                              className={`px-2 min-h-[36px] rounded text-xs border ${l.active === false ? 'border-stone-300 text-stone-500 dark:text-stone-400' : 'border-emerald-300 text-emerald-700 bg-emerald-50'}`}>
+                              {l.active === false ? 'Неактивна' : 'Активна'}
+                            </button>
+                            <button onClick={() => removeLocation(l.id)} className="w-9 h-9 flex items-center justify-center text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+                          </>
+                        )}
                       </div>
                     </div>
                     {openId === l.id && (
@@ -578,12 +683,14 @@ function LocationsTab({ allLocations, reloadLocations }) {
                         {l.address && <div className="text-xs text-stone-500 dark:text-stone-400 mb-2">{l.address}</div>}
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400">Працівники</span>
-                          <button onClick={openAssign} className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1"><Plus className="w-3 h-3" />Призначити</button>
+                          {!readOnly && <button onClick={openAssign} className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1"><Plus className="w-3 h-3" />Призначити</button>}
                         </div>
                         {workers.length === 0 ? <p className="text-sm text-stone-400 italic">Немає працівників</p> : workers.map((w) => (
                           <div key={w.userLocationId} className="flex items-center justify-between py-1.5 text-sm">
-                            <span>{w.name}{w.surname ? ` ${w.surname}` : ''} {w.isManager && <span className="text-xs text-purple-600">· керівник</span>} {!w.approved && <span className="text-xs text-amber-600">· очікує</span>}</span>
-                            <button onClick={() => detach(w.userId)} className="text-xs text-stone-500 dark:text-stone-400 hover:text-rose-600">Зняти</button>
+                            <button type="button" onClick={() => onOpenUser?.(w.userId)} className="text-left hover:text-rose-600 truncate">
+                              {w.name}{w.surname ? ` ${w.surname}` : ''} {w.isManager && <span className="text-xs text-purple-600">· керівник</span>} {!w.approved && <span className="text-xs text-amber-600">· очікує</span>}
+                            </button>
+                            {!readOnly && <button onClick={() => detach(w.userId)} className="text-xs text-stone-500 dark:text-stone-400 hover:text-rose-600">Зняти</button>}
                           </div>
                         ))}
                       </div>
