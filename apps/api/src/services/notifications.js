@@ -17,7 +17,8 @@ const TYPE_PREF = {
 export async function notify({ recipientIds, type, title, body, linkPath, actorId, metadata, prefKey }) {
   try {
     const ids = [...new Set((recipientIds || []).filter(Boolean))];
-    if (ids.length === 0) return [];
+    console.log('[notify] called', { type, recipientCount: ids.length, actorId });
+    if (ids.length === 0) { console.log('[notify] no recipients — skip'); return []; }
     const key = prefKey || TYPE_PREF[type] || null;
 
     let allowed = ids;
@@ -40,6 +41,7 @@ export async function notify({ recipientIds, type, title, body, linkPath, actorI
         metadata: metadata ?? undefined,
       })),
     });
+    console.log('[notify] created', allowed.length);
     return allowed;
   } catch (e) {
     console.error('[notify]', type, e.message);
@@ -48,13 +50,17 @@ export async function notify({ recipientIds, type, title, body, linkPath, actorI
 }
 
 async function allUserIdsExcept(exceptId) {
-  const users = await prisma.user.findMany({ select: { id: true } });
-  return users.map((u) => u.id).filter((id) => id !== exceptId);
+  const users = await prisma.user.findMany({
+    where: { id: { not: exceptId }, approved: true },
+    select: { id: true },
+  });
+  return users.map((u) => u.id);
 }
 
 export async function notifyNewArticle(article, actor) {
   try {
     const mode = article.notifyMode;
+    console.log('[notifyNewArticle]', { articleId: article.id, notifyMode: mode, notifyTargets: article.notifyTargets });
     if (!mode) return;
     const targets = Array.isArray(article.notifyTargets) ? article.notifyTargets : [];
     let recipientIds = [];
@@ -77,6 +83,7 @@ export async function notifyNewArticle(article, actor) {
       prefKey = 'newArticleMyLocation';
     }
     recipientIds = recipientIds.filter((id) => id !== article.authorId);
+    console.log('[notifyNewArticle] recipients before filter', recipientIds.length);
     await notify({
       recipientIds,
       type: 'new_article',
@@ -179,6 +186,29 @@ export async function notifyDigest(article, actor) {
 }
 
 // Раз на день генерує сповіщення про сьогоднішні дні народження.
+// Лінивий "планувальник": запланована стаття стала видимою → оповістити (1 раз).
+let lastScheduledCheck = 0;
+export async function checkScheduledPublishing() {
+  try {
+    if (Date.now() - lastScheduledCheck < 60000) return;
+    lastScheduledCheck = Date.now();
+    const due = await prisma.article.findMany({
+      where: {
+        status: 'published',
+        notifiedAt: null,
+        notifyMode: { not: null },
+        publishAt: { not: null, lte: new Date() },
+      },
+      include: { author: true },
+      take: 50,
+    });
+    for (const a of due) {
+      await notifyNewArticle(a, a.author || { id: a.authorId });
+      await prisma.article.update({ where: { id: a.id }, data: { notifiedAt: new Date() } });
+    }
+  } catch (e) { console.error('[checkScheduledPublishing]', e.message); }
+}
+
 let lastBirthdayCheck = null;
 export async function checkBirthdays() {
   try {

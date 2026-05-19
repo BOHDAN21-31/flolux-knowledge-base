@@ -124,6 +124,7 @@ model Article {
   publishAt   DateTime?
   notifyMode  String?
   notifyTargets Json?
+  notifiedAt  DateTime?
   isDigest    Boolean      @default(false)
   comments    Comment[]
   suggestions Suggestion[]

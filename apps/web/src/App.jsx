@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, createElement } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2, Sun, Moon, Bookmark, FileText } from 'lucide-react';
-import { apiGet, apiPost, apiPatch, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
+import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2, Sun, Moon, Bookmark, FileText, Trash2 } from 'lucide-react';
+import { apiGet, apiPost, apiPatch, apiDelete, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
 import PublicProfile from './components/PublicProfile';
 import AdminPanel from './components/AdminPanel';
@@ -30,6 +30,7 @@ function pathForFrame(f) {
     case 'article': return `/articles/${f.articleId}`;
     case 'editArticle': return `/articles/${f.articleId}/edit`;
     case 'createArticle': return `/topics/${f.topicId}/new`;
+    case 'createDigest': return '/digests/new';
     default: return '/';
   }
 }
@@ -39,6 +40,7 @@ function frameFromPath(pathname) {
   if (p === '/tech') return { type: 'tech' };
   if (p === '/profile') return { type: 'profile' };
   if (p === '/notifications') return { type: 'notifications' };
+  if (p === '/digests/new') return { type: 'createDigest' };
   if (p === '/admin') return { type: 'admin' };
   let m;
   if ((m = p.match(/^\/profile\/(data|security|locations|notifications)$/))) return { type: 'profile', section: m[1] };
@@ -278,6 +280,7 @@ function AppInner() {
         isAdmin={isAdmin}
         tab={current.tab || (isAdmin ? 'dashboard' : 'birthdays')}
         onTab={(t) => reset({ type: 'admin', tab: t })}
+        onCreateDigest={() => push({ type: 'createDigest' })}
       />
     );
   } else if (current.type === 'topic') {
@@ -325,6 +328,17 @@ function AppInner() {
         onSaved={async () => { await reloadArticles(); back(); }}
       />
     ) : <NotFound onBack={back} />;
+  } else if (current.type === 'createDigest' && canAdminArea) {
+    screen = (
+      <ArticleForm
+        mode="create"
+        digest
+        topic={{ id: 'hr-digests', title: 'Дайджест компанії' }}
+        allLocations={allLocations}
+        onClose={back}
+        onSaved={async () => { await reloadArticles(); back(); }}
+      />
+    );
   } else {
     screen = <NotFound onBack={() => reset({ type: 'home' })} />;
   }
@@ -990,7 +1004,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
                     className="flex-shrink-0 w-64 text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 hover:border-rose-300 transition">
                     <div className="flex items-center gap-1.5 mb-1">
                       <span className="px-1.5 py-0.5 rounded text-[10px] bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300">
-                        {d.status === 'scheduled' ? 'Заплановано' : 'Чернетка'}
+                        Чернетка
                       </span>
                     </div>
                     <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-2">{d.title}</div>
@@ -1344,6 +1358,20 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
     await load();
   };
 
+  const onDelete = async () => {
+    const ok = await confirm({
+      title: 'Видалити статтю?',
+      description: `Стаття "${article?.title || ''}" та всі її коментарі, пропозиції, перегляди будуть видалені назавжди. Цю дію неможливо скасувати.`,
+      confirmLabel: 'Так, видалити',
+      confirmVariant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await apiDelete(`/api/articles/${articleId}`);
+      onBack();
+    } catch (e) { alert(e.message); }
+  };
+
   const toggleBookmark = async () => {
     try {
       const r = await apiPost(`/api/articles/${articleId}/bookmark`);
@@ -1421,6 +1449,11 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
           <button onClick={copyLink} className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 hover:text-rose-600 min-h-[44px] px-2 transition" title="Копіювати посилання">
             <Link2 className="w-4 h-4" /> <span className="hidden sm:inline">{copied ? 'Скопійовано' : 'Копіювати посилання'}</span>
           </button>
+          {canEdit && (
+            <button onClick={onDelete} className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 hover:text-red-600 min-h-[44px] px-2 transition" title="Видалити статтю">
+              <Trash2 className="w-4 h-4" /> <span className="hidden sm:inline">Видалити</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1465,7 +1498,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
               {article.status === 'draft' && (
                 <span className="px-2 py-0.5 rounded-full text-xs bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">📝 Чернетка</span>
               )}
-              {article.status === 'scheduled' && article.publishAt && (
+              {article.publishAt && new Date(article.publishAt).getTime() > Date.now() && (
                 <span className="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800 border border-amber-200">
                   🕐 Запланована публікація: {new Date(article.publishAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}
                 </span>
@@ -1635,7 +1668,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
 // ============ ФОРМА СТАТТІ (створення + редагування) ============
 const mediaType = (url) => (/\.(mp4|mov|webm)$/i.test(url) ? 'video' : 'image');
 
-function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved }) {
+function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved, digest = false }) {
   const isEdit = mode === 'edit';
   const { roleKeys, roleName } = useRoles();
   const [notifyOn, setNotifyOn] = useState(!!article?.notifyMode);
@@ -1658,6 +1691,7 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [upPct, setUpPct] = useState(0);
   const [cityFilter, setCityFilter] = useState('all');
   const [locSearch, setLocSearch] = useState('');
   const mediaRef = useRef(null);
@@ -1669,7 +1703,9 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
   const [pubMode, setPubMode] = useState(
-    article?.status === 'draft' ? 'draft' : article?.status === 'scheduled' ? 'schedule' : 'now'
+    article?.status === 'draft'
+      ? 'draft'
+      : (article?.publishAt && new Date(article.publishAt).getTime() > Date.now() ? 'schedule' : 'now')
   );
   const [publishAt, setPublishAt] = useState(toLocalInput(article?.publishAt));
 
@@ -1686,16 +1722,16 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
   const onPickMedia = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    setError(''); setUploading(true);
+    setError(''); setUploading(true); setUpPct(0);
     try {
       for (const f of files) {
-        const up = await apiUpload(f);
+        const up = await apiUpload(f, (pct) => setUpPct(pct));
         setMediaUrls((prev) => [...prev, { url: up.url, type: up.type }]);
       }
     } catch (err) {
       setError(err.message);
     } finally {
-      setUploading(false);
+      setUploading(false); setUpPct(0);
       if (mediaRef.current) mediaRef.current.value = '';
     }
   };
@@ -1724,6 +1760,8 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
       };
       if (isEdit) {
         await apiPatch(`/api/articles/${article.id}`, payload);
+      } else if (digest) {
+        await apiPost('/api/digests', payload);
       } else {
         await apiPost('/api/articles', {
           ...payload,
@@ -1743,7 +1781,7 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
       <div className="bg-white dark:bg-stone-900 w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
         <div className="p-4 md:p-6 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between sticky top-0 bg-white dark:bg-stone-900 z-10">
           <div>
-            <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">{isEdit ? 'Редагування статті' : 'Нова стаття в розділі'}</p>
+            <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">{isEdit ? 'Редагування статті' : digest ? 'Новий дайджест' : 'Нова стаття в розділі'}</p>
             <h2 className="text-lg md:text-xl text-stone-800 dark:text-stone-100">{isEdit ? form.title || 'Без назви' : topic.title}</h2>
           </div>
           <button onClick={onClose} className="w-11 h-11 flex items-center justify-center flex-shrink-0 text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
@@ -1811,7 +1849,7 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
             <input ref={mediaRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={onPickMedia} />
             <button type="button" onClick={() => mediaRef.current?.click()} disabled={uploading}
               className="flex items-center gap-2 px-4 min-h-[44px] border border-stone-300 hover:border-rose-400 rounded-md text-sm text-stone-700 dark:text-stone-200 disabled:opacity-60">
-              <Plus className="w-4 h-4" /> {uploading ? 'Завантаження...' : 'Додати фото/відео'}
+              <Plus className="w-4 h-4" /> {uploading ? `Завантаження… ${upPct}%` : 'Додати фото/відео'}
             </button>
             {mediaUrls.length > 0 && (
               <div className="grid grid-cols-3 gap-2 mt-3">
@@ -1894,7 +1932,7 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
         <div className="p-4 md:p-6 border-t border-stone-200 dark:border-stone-700 flex gap-2 justify-end sticky bottom-0 bg-white dark:bg-stone-900">
           <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Скасувати</button>
           <button onClick={handleSave} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
-            {busy ? 'Збереження...' : pubMode === 'draft' ? 'Зберегти чернетку' : pubMode === 'schedule' ? 'Запланувати' : (isEdit ? 'Зберегти зміни' : 'Опублікувати')}
+            {busy ? 'Збереження...' : pubMode === 'draft' ? 'Зберегти чернетку' : pubMode === 'schedule' ? 'Запланувати' : (isEdit ? 'Зберегти зміни' : digest ? 'Опублікувати дайджест' : 'Опублікувати')}
           </button>
         </div>
       </div>

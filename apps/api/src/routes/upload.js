@@ -22,6 +22,8 @@ const ALLOWED = {
   'image/webp': { ext: 'webp', kind: 'image' },
   'image/heic': { ext: 'heic', kind: 'image' },
   'image/heif': { ext: 'heic', kind: 'image' },
+  'image/heic-sequence': { ext: 'heic', kind: 'image' },
+  'image/heif-sequence': { ext: 'heic', kind: 'image' },
   'video/mp4': { ext: 'mp4', kind: 'video' },
   'video/quicktime': { ext: 'mov', kind: 'video' },
   'video/webm': { ext: 'webm', kind: 'video' },
@@ -39,7 +41,18 @@ router.post('/', requireAuth, upload.single('file'), async (req, res) => {
 
     const buf = req.file.buffer;
     const sniffed = await fileTypeFromBuffer(buf);
-    const allowed = sniffed && ALLOWED[sniffed.mime];
+    let allowed = sniffed && ALLOWED[sniffed.mime];
+    let resolvedMime = sniffed?.mime;
+    // Фолбек для HEIC/HEIF з iPhone: file-type інколи не розпізнає — довіряємо
+    // заявленому браузером MIME / розширенню .heic/.heif.
+    if (!allowed) {
+      const declared = String(req.file.mimetype || '').toLowerCase();
+      const origName = String(req.file.originalname || '').toLowerCase();
+      if (ALLOWED[declared]) { allowed = ALLOWED[declared]; resolvedMime = declared; }
+      else if (/\.(heic|heif)$/.test(origName) || declared.includes('heic') || declared.includes('heif')) {
+        allowed = ALLOWED['image/heic']; resolvedMime = 'image/heic';
+      }
+    }
     if (!allowed) {
       return res.status(400).json({ error: 'Недозволений тип файлу' });
     }
@@ -57,7 +70,7 @@ router.post('/', requireAuth, upload.single('file'), async (req, res) => {
       url: `/uploads/${filename}`,
       type: allowed.kind,
       size: buf.length,
-      mime: sniffed.mime,
+      mime: resolvedMime,
     });
   } catch (e) {
     if (e instanceof multer.MulterError && e.code === 'LIMIT_FILE_SIZE') {

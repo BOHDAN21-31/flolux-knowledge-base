@@ -61,22 +61,36 @@ export const apiPatch = (path, body) => request('PATCH', path, body ?? {});
 export const apiDelete = (path) => request('DELETE', path);
 
 // Завантаження файлу (multipart/form-data). Повертає { url, type, size, mime }.
-export async function apiUpload(file) {
-  const fd = new FormData();
-  fd.append('file', file);
-  const headers = {};
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
+// Завантаження через XHR — щоб мати прогрес (onProgress(percent)).
+export function apiUpload(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload');
+    const token = getToken();
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
-  const res = await fetch('/api/upload', { method: 'POST', headers, body: fd });
-  if (res.status === 401) {
-    clearToken();
-    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
-    throw new Error('Сесія завершилася. Увійдіть знову.');
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Помилка завантаження');
-  return data;
+    if (xhr.upload && typeof onProgress === 'function') {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+    }
+    xhr.onload = () => {
+      if (xhr.status === 401) {
+        clearToken();
+        window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+        reject(new Error('Сесія завершилася. Увійдіть знову.'));
+        return;
+      }
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch { /* ignore */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+      else reject(new Error(data.error || 'Помилка завантаження'));
+    };
+    xhr.onerror = () => reject(new Error('Помилка мережі під час завантаження'));
+    xhr.send(fd);
+  });
 }
 
 // WebAuthn (Touch/Face ID) через @simplewebauthn/browser

@@ -27,7 +27,7 @@ const HR_NAV = [
   { key: 'digests', label: '📢 Дайджести', icon: Megaphone },
 ];
 
-export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, isAdmin = true, tab: tabProp, onTab }) {
+export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, isAdmin = true, tab: tabProp, onTab, onCreateDigest }) {
   const NAV = isAdmin ? [...ADMIN_NAV, ...HR_NAV] : HR_NAV;
   const tab = tabProp || (isAdmin ? 'dashboard' : 'birthdays');
   const setTab = (t) => onTab?.(t);
@@ -82,7 +82,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
           {tab === 'moderation' && <ModerationTab articles={articles} />}
           {tab === 'audit' && <AuditTab />}
           {tab === 'birthdays' && <BirthdaysTab />}
-          {tab === 'digests' && <DigestsTab />}
+          {tab === 'digests' && <DigestsTab onCreateDigest={onCreateDigest} />}
         </div>
       </div>
     </div>
@@ -684,7 +684,12 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
   const filtered = articles.filter((a) => {
     if (fRole && topicRole(a) !== fRole) return false;
     if (fLoc && !(a.locations || []).some((l) => l.locationId === fLoc)) return false;
-    if (fStatus && (a.status || 'published') !== fStatus) return false;
+    if (fStatus) {
+      const isScheduled = (a.status || 'published') === 'published' && a.publishAt && new Date(a.publishAt).getTime() > Date.now();
+      if (fStatus === 'scheduled' && !isScheduled) return false;
+      if (fStatus === 'published' && ((a.status || 'published') !== 'published' || isScheduled)) return false;
+      if (fStatus === 'draft' && (a.status || 'published') !== 'draft') return false;
+    }
     if (q && !(`${a.title} ${a.authorName || ''}`.toLowerCase().includes(q.toLowerCase()))) return false;
     return true;
   });
@@ -1250,33 +1255,16 @@ function BirthdaysTab() {
 }
 
 // ============ 📢 ДАЙДЖЕСТИ (HR/admin) ============
-function DigestsTab() {
+function DigestsTab({ onCreateDigest }) {
   const [items, setItems] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: '', content: '' });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const load = () => apiGet('/api/digests').then(setItems).catch(() => {});
-  useEffect(() => { load(); }, []);
-
-  const create = async (asDraft) => {
-    if (!form.title.trim() || !form.content.trim()) { setError('Заповніть назву та зміст'); return; }
-    setBusy(true); setError('');
-    try {
-      await apiPost('/api/digests', { title: form.title, content: form.content, status: asDraft ? 'draft' : 'published' });
-      setForm({ title: '', content: '' });
-      setOpen(false);
-      await load();
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
-  };
+  useEffect(() => { apiGet('/api/digests').then(setItems).catch(() => {}); }, []);
 
   return (
     <div className="space-y-4">
       <Card className="p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg text-stone-800 dark:text-stone-100">Дайджести ({items.length})</h3>
-          <button onClick={() => setOpen(true)} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+          <button onClick={() => onCreateDigest?.()} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
             <Plus className="w-4 h-4" /> Створити дайджест
           </button>
         </div>
@@ -1290,28 +1278,6 @@ function DigestsTab() {
           {items.length === 0 && <p className="text-sm text-stone-400 italic py-4 text-center">Ще немає дайджестів</p>}
         </div>
       </Card>
-
-      {open && (
-        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
-          <div className="bg-white dark:bg-stone-900 w-full h-full sm:h-auto sm:max-w-2xl sm:max-h-[90vh] rounded-none sm:rounded-lg flex flex-col overflow-hidden" style={{ fontFamily: 'system-ui, sans-serif' }}>
-            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-200 dark:border-stone-700 sticky top-0 bg-white dark:bg-stone-900">
-              <h3 className="text-lg text-stone-800 dark:text-stone-100" style={{ fontFamily: 'Georgia, serif' }}>Новий дайджест</h3>
-              <button onClick={() => setOpen(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-4 sm:p-5 space-y-3 overflow-y-auto flex-1">
-              <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Заголовок дайджесту"
-                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
-              <textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={12} placeholder="Текст (Markdown підтримується)"
-                className="w-full p-3 border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
-              {error && <div className="p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
-            </div>
-            <div className="p-4 sm:p-5 border-t border-stone-200 dark:border-stone-700 flex gap-2 justify-end sticky bottom-0 bg-white dark:bg-stone-900">
-              <button onClick={() => create(true)} disabled={busy} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Зберегти чернетку</button>
-              <button onClick={() => create(false)} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">{busy ? 'Збереження…' : 'Опублікувати + оповістити'}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

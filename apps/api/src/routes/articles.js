@@ -3,7 +3,7 @@ import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { serializeArticle, serializeComment, serializeSuggestion } from '../serialize.js';
 import { wrap, isAdmin, logAction, roleList, restrictedRoleKeys } from '../lib.js';
-import { notifyNewArticle, notifyComment, notifySuggestion } from '../services/notifications.js';
+import { notifyNewArticle, notifyComment, notifySuggestion, checkScheduledPublishing } from '../services/notifications.js';
 
 const asJsonArray = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : undefined);
 
@@ -36,14 +36,13 @@ async function approvedLocationIds(userId) {
 // (автор бачить їх окремо через ?status=draft та GET /:id).
 function statusVisibility() {
   return {
-    AND: [
-      { status: { not: 'draft' } },
-      { OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] },
-    ],
+    status: 'published',
+    OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }],
   };
 }
 
 // Нормалізація status/publishAt для POST/PATCH.
+// status тепер тільки 'draft' | 'published'. Запланована = published з майбутнім publishAt.
 function normalizePublication(body) {
   const out = {};
   const hasPublishAt = body?.publishAt !== undefined;
@@ -51,9 +50,9 @@ function normalizePublication(body) {
   const future = pa && !Number.isNaN(pa.getTime()) && pa.getTime() > Date.now();
   if (body?.status === 'draft') {
     out.status = 'draft';
-    out.publishAt = pa && !Number.isNaN(pa.getTime()) ? pa : null;
+    out.publishAt = null;
   } else if (future) {
-    out.status = 'scheduled';
+    out.status = 'published';
     out.publishAt = pa;
   } else if (body?.status !== undefined || hasPublishAt) {
     out.status = 'published';
@@ -64,6 +63,7 @@ function normalizePublication(body) {
 
 // GET /api/articles?topicId=X&roleKey=a,b&locationId=x,y&q=...&sort=new|old|az|rating
 router.get('/', requireAuth, wrap(async (req, res) => {
+  await checkScheduledPublishing(); // лінивий планувальник (throttled 60с)
   const csv = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
   const where = {};
   if (req.query.topicId) where.topicId = String(req.query.topicId);
@@ -97,11 +97,6 @@ router.get('/', requireAuth, wrap(async (req, res) => {
   if (statusQ === 'draft') {
     // лише власні чернетки
     where.AND = [...(where.AND || []), { authorId: req.user.id, status: 'draft' }];
-  } else if (statusQ === 'scheduled') {
-    where.AND = [
-      ...(where.AND || []),
-      isAdmin(req.user) ? { status: 'scheduled' } : { status: 'scheduled', authorId: req.user.id },
-    ];
   } else if (!isAdmin(req.user)) {
     // звичайний список: опубліковані (час настав) або власні
     where.AND = [...(where.AND || []), statusVisibility()];
@@ -335,9 +330,13 @@ router.post('/', requireAuth, wrap(async (req, res) => {
     },
     include: articleInclude,
   });
-  // Сповіщення лише для одразу опублікованих (draft/scheduled — ні)
-  if ((article.status || 'published') === 'published' && article.notifyMode) {
-    await notifyNewArticle(article, req.user);
+  // Оповіщаємо лише якщо стаття вже "жива" (published і час настав).
+  // Запланована (майбутній publishAt) — оповіститься планувальником пізніше.
+  const liveNow = article.status === 'published'
+    && (!article.publishAt || new Date(article.publishAt).getTime() <= Date.now());
+  if (liveNow && article.notifyMode) {
+    try { await notifyNewArticle(article, req.user); } catch (e) { console.error('[POST /articles] notify failed', e); }
+    await prisma.article.update({ where: { id: article.id }, data: { notifiedAt: new Date() } });
   }
   res.json(serializeArticle(article));
 }));
@@ -382,12 +381,14 @@ router.patch('/:id', requireAuth, wrap(async (req, res) => {
     include: articleInclude,
   });
 
-  // Перехід у published з draft/scheduled → оповістити
+  // Перехід у "живий" стан → оповістити (одноразово, якщо ще не оповіщено)
   const wasLive = (existing.status || 'published') === 'published'
     && (!existing.publishAt || new Date(existing.publishAt).getTime() <= Date.now());
-  const nowLive = (article.status || 'published') === 'published';
-  if (!wasLive && nowLive && article.notifyMode) {
-    await notifyNewArticle(article, req.user);
+  const nowLive = article.status === 'published'
+    && (!article.publishAt || new Date(article.publishAt).getTime() <= Date.now());
+  if (!wasLive && nowLive && article.notifyMode && !article.notifiedAt) {
+    try { await notifyNewArticle(article, req.user); } catch (e) { console.error('[PATCH /articles] notify failed', e); }
+    await prisma.article.update({ where: { id: article.id }, data: { notifiedAt: new Date() } });
   }
   res.json(serializeArticle(article));
 }));

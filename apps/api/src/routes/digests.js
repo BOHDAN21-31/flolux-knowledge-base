@@ -41,6 +41,7 @@ router.post('/', requireAuth, requireHrOrAdmin, wrap(async (req, res) => {
     ? req.body.tags.split(',').map((t) => t.trim()).filter(Boolean)
     : (Array.isArray(req.body.tags) ? req.body.tags : []);
   const mediaUrls = Array.isArray(req.body.mediaUrls) ? req.body.mediaUrls.filter((x) => typeof x === 'string') : [];
+  const locationIds = Array.isArray(req.body.locationIds) ? req.body.locationIds.filter((x) => typeof x === 'string') : [];
   const isDraft = req.body.status === 'draft';
 
   const article = await prisma.article.create({
@@ -54,6 +55,7 @@ router.post('/', requireAuth, requireHrOrAdmin, wrap(async (req, res) => {
       authorId: req.user.id,
       isDigest: true,
       status: isDraft ? 'draft' : 'published',
+      locations: { create: locationIds.map((locationId) => ({ locationId })) },
     },
     include: articleInclude,
   });

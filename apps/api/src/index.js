@@ -56,6 +56,7 @@ app.use('/uploads', express.static(UPLOAD_DIR, {
     if (filePath.endsWith('.mp4')) res.setHeader('Content-Type', 'video/mp4');
     if (filePath.endsWith('.mov')) res.setHeader('Content-Type', 'video/quicktime');
     if (filePath.endsWith('.webm')) res.setHeader('Content-Type', 'video/webm');
+    if (filePath.endsWith('.heic') || filePath.endsWith('.heif')) res.setHeader('Content-Type', 'image/heic');
   },
 }));
 

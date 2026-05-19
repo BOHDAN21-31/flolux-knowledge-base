@@ -30,7 +30,10 @@ router.get('/', requireAuth, wrap(async (req, res) => {
       where: {
         OR: [{ title: like }, { content: like }],
         ...(admin ? {} : {
-          AND: [{ OR: [{ locations: { none: {} } }, { locations: { some: { locationId: { in: locIds } } } }] }],
+          AND: [
+            { OR: [{ locations: { none: {} } }, { locations: { some: { locationId: { in: locIds } } } }] },
+            { status: 'published', OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] },
+          ],
         }),
       },
       include: { topic: { select: { roleKey: true } } },
