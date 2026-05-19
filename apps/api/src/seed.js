@@ -1,5 +1,28 @@
 import { prisma } from './db.js';
 import { DEFAULT_TOPICS, DEFAULT_ROLES } from './constants.js';
+import { PERMISSION_CATALOG, DEFAULT_PRESETS } from './permissions.js';
+
+// Сід каталогу permissions. Upsert за ключем — назви/описи оновлюються,
+// дефолтні лишаються protected (не видаляються через API).
+export async function seedPermissions() {
+  for (const p of PERMISSION_CATALOG) {
+    await prisma.permission.upsert({
+      where: { key: p.key },
+      update: { category: p.category, name: p.name, description: p.description ?? null, protected: true },
+      create: { ...p, description: p.description ?? null, protected: true },
+    });
+  }
+  console.log(`[seed] permissions синхронізовано (${PERMISSION_CATALOG.length})`);
+}
+
+// Дефолтні пресети — лише якщо такої назви ще нема (правки адміна не чіпаємо).
+export async function seedPresets() {
+  for (const preset of DEFAULT_PRESETS) {
+    const exists = await prisma.permissionPreset.findFirst({ where: { name: preset.name } });
+    if (!exists) await prisma.permissionPreset.create({ data: { ...preset } });
+  }
+  console.log(`[seed] пресети синхронізовано (${DEFAULT_PRESETS.length} дефолтних)`);
+}
 
 // Сід дефолтних ролей. Upsert лише за відсутності ключа — правки адміна не затираються.
 export async function seedRoles() {

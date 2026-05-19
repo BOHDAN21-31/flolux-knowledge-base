@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { wrap, isAdmin, isSenior, roleList, restrictedRoleKeys } from '../lib.js';
+import { wrap, isAdmin, roleList, restrictedRoleKeys } from '../lib.js';
+import { hasPermission } from '../permissions.js';
 
 const router = Router();
 
@@ -16,11 +17,12 @@ router.get('/', requireAuth, wrap(async (req, res) => {
     Promise.resolve(new Set(roleList(req.user))),
   ]);
   const admin = isAdmin(req.user);
-  const senior = isSenior(req.user); // admin|hr — усі локації/ролі (але не чернетки в пошуку)
+  const viewAll = hasPermission(req.user, 'content.view_all');
+  const viewRestricted = hasPermission(req.user, 'content.view_restricted');
   const liveOnly = { status: 'published', OR: [{ publishAt: null }, { publishAt: { lte: new Date() } }] };
 
   let locIds = [];
-  if (!senior) {
+  if (!viewAll) {
     const links = await prisma.userLocation.findMany({
       where: { userId: req.user.id, approved: true }, select: { locationId: true },
     });
@@ -31,7 +33,7 @@ router.get('/', requireAuth, wrap(async (req, res) => {
     prisma.article.findMany({
       where: {
         OR: [{ title: like }, { content: like }],
-        ...(admin ? {} : senior ? { AND: [liveOnly] } : {
+        ...(admin ? {} : viewAll ? { AND: [liveOnly] } : {
           AND: [
             { OR: [{ locations: { none: {} } }, { locations: { some: { locationId: { in: locIds } } } }] },
             liveOnly,
@@ -60,7 +62,7 @@ router.get('/', requireAuth, wrap(async (req, res) => {
     }),
   ]);
 
-  const allowedRole = (rk) => senior || !rk || !restricted.has(rk) || mineRoles.has(rk);
+  const allowedRole = (rk) => viewRestricted || !rk || !restricted.has(rk) || mineRoles.has(rk);
 
   const articles = articlesRaw
     .filter((a) => allowedRole(a.topic?.roleKey))

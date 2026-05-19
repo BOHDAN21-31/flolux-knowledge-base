@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 import { prisma } from './db.js';
-import { seedTopics, seedLocations, seedRoles, seedSpecialTopics } from './seed.js';
+import { seedTopics, seedLocations, seedRoles, seedSpecialTopics, seedPermissions, seedPresets } from './seed.js';
 import { initTelegram, setupWebhook } from './services/telegram.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +52,8 @@ async function main() {
     await seedTopics();
     await seedSpecialTopics();
     await seedLocations();
+    await seedPermissions();
+    await seedPresets();
   } catch (e) {
     console.error('[startup] seed помилка:', e.message);
   }

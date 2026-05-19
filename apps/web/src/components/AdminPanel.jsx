@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard, Users, MapPin, Inbox, BookOpen, MessageSquare, ScrollText,
   Shield, Plus, Trash2, X, Search, ChevronRight, FileText, Cake, Megaphone, Key,
+  KeyRound, Check,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api';
 import { useRoles } from '../RolesContext';
@@ -22,6 +23,7 @@ function buildNav(isAdmin) {
   nav.push({ key: 'content', label: 'Контент', icon: BookOpen });
   if (isAdmin) nav.push({ key: 'topics', label: 'Розділи', icon: FileText });
   if (isAdmin) nav.push({ key: 'roles', label: 'Ролі', icon: Shield });
+  if (isAdmin) nav.push({ key: 'access', label: '🔐 Карта доступів', icon: KeyRound });
   nav.push({ key: 'moderation', label: 'Модерація', icon: MessageSquare });
   nav.push({ key: 'audit', label: 'Журнал дій', icon: ScrollText });
   nav.push({ key: 'birthdays', label: '🎂 Дні народження', icon: Cake });
@@ -84,6 +86,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
           )}
           {tab === 'topics' && isAdmin && <TopicsTab topicsMap={topicsMap} reloadTopics={reloadTopics} />}
           {tab === 'roles' && isAdmin && <RolesTab />}
+          {tab === 'access' && isAdmin && <AccessMatrixTab onOpenUser={onOpenUser} />}
           {tab === 'moderation' && <ModerationTab articles={articles} />}
           {tab === 'audit' && <AuditTab />}
           {tab === 'birthdays' && <BirthdaysTab />}
@@ -1443,5 +1446,355 @@ function DigestsTab({ onCreateDigest }) {
         </div>
       </Card>
     </div>
+  );
+}
+
+// ============ КАРТА ДОСТУПІВ (тільки admin) ============
+const CAT_LABEL = { content: 'Контент', users: 'Користувачі', locations: 'Локації', system: 'Система' };
+const CAT_ORDER = ['content', 'users', 'locations', 'system'];
+
+function AccessMatrixTab({ onOpenUser }) {
+  const [sub, setSub] = useState('users');
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2">
+        {[['users', 'Користувачі'], ['presets', 'Пресети']].map(([k, l]) => (
+          <button key={k} onClick={() => setSub(k)}
+            className={`px-4 min-h-[40px] rounded-md text-sm border transition ${sub === k ? 'bg-rose-50 text-rose-700 border-rose-200' : 'border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {sub === 'users' ? <AccessUsers onOpenUser={onOpenUser} /> : <PresetsSubTab />}
+    </div>
+  );
+}
+
+function AccessUsers({ onOpenUser }) {
+  const { roleName, roleChipStyle } = useRoles();
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  const [q, setQ] = useState('');
+  const [filt, setFilt] = useState('all'); // all | with | without
+  const [modalUser, setModalUser] = useState(null);
+
+  const load = () => apiGet('/api/admin/permission-matrix').then(setRows).catch((e) => setErr(e.message));
+  useEffect(() => { load(); }, []);
+
+  if (err) return <Card className="p-6 text-rose-600 text-sm">{err}</Card>;
+  if (!rows) return <Card className="p-8 text-center text-stone-400 italic">Завантаження…</Card>;
+
+  const ql = q.trim().toLowerCase();
+  const shown = rows.filter((u) => {
+    if (ql && !`${u.name} ${u.surname || ''}`.toLowerCase().includes(ql)) return false;
+    if (filt === 'with' && !u.hasAny) return false;
+    if (filt === 'without' && u.hasAny) return false;
+    return true;
+  });
+  const Counters = ({ u }) => (
+    <div className="flex flex-wrap gap-1.5">
+      {CAT_ORDER.map((c) => {
+        const cc = u.counts[c] || { have: 0, total: 0 };
+        const on = cc.have > 0;
+        return (
+          <span key={c} title={CAT_LABEL[c]}
+            className={`text-[11px] px-2 py-0.5 rounded-full border ${on ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'text-stone-400 border-stone-200 dark:border-stone-700'}`}>
+            {CAT_LABEL[c]} {cc.have}/{cc.total}
+          </span>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <>
+      <Card className="p-4 md:p-5">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук за іменем…"
+              className="w-full pl-9 pr-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-transparent" />
+          </div>
+          <select value={filt} onChange={(e) => setFilt(e.target.value)}
+            className="px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-transparent">
+            <option value="all">Усі</option>
+            <option value="with">З permissions</option>
+            <option value="without">Без permissions</option>
+          </select>
+        </div>
+      </Card>
+
+      <Card className="p-4 md:p-5 mt-4">
+        <div className="text-xs uppercase tracking-wider text-stone-400 mb-3">Користувачі ({shown.length})</div>
+
+        {/* Desktop: таблиця */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wider text-stone-400 border-b border-stone-200 dark:border-stone-700">
+                <th className="py-2 pr-3">Користувач</th>
+                <th className="py-2 pr-3">Ролі</th>
+                <th className="py-2 pr-3">Категорії прав</th>
+                <th className="py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((u) => (
+                <tr key={u.id} className="border-b border-stone-100 dark:border-stone-800 last:border-0">
+                  <td className="py-2 pr-3">
+                    <div className="flex items-center gap-2">
+                      {u.avatarUrl
+                        ? <img src={u.avatarUrl} alt="" loading="lazy" className="w-8 h-8 rounded-full object-cover" />
+                        : <span className="w-8 h-8 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-xs">{(u.name || '?')[0]}</span>}
+                      <span className="text-stone-800 dark:text-stone-100">{u.name}{u.surname ? ` ${u.surname}` : ''}</span>
+                    </div>
+                  </td>
+                  <td className="py-2 pr-3">
+                    <div className="flex flex-wrap gap-1">
+                      {u.roles.map((r) => <span key={r} className="text-[10px] px-1.5 py-0.5 rounded-full border" style={roleChipStyle(r)}>{roleName(r)}</span>)}
+                      {u.roles.length === 0 && <span className="text-[10px] text-stone-400 italic">—</span>}
+                    </div>
+                  </td>
+                  <td className="py-2 pr-3"><Counters u={u} /></td>
+                  <td className="py-2 text-right">
+                    <button onClick={() => setModalUser(u.id)} className="px-3 min-h-[36px] text-xs rounded-md border border-stone-200 dark:border-stone-700 hover:border-rose-300">
+                      Permissions
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile: картки */}
+        <div className="md:hidden space-y-2">
+          {shown.map((u) => (
+            <div key={u.id} className="border border-stone-200 dark:border-stone-700 rounded-lg p-3">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-sm text-stone-800 dark:text-stone-100 truncate">{u.name}{u.surname ? ` ${u.surname}` : ''}</span>
+                <button onClick={() => setModalUser(u.id)} className="px-3 min-h-[36px] text-xs rounded-md border border-stone-200 dark:border-stone-700 flex-shrink-0">Permissions</button>
+              </div>
+              <Counters u={u} />
+            </div>
+          ))}
+        </div>
+        {shown.length === 0 && <p className="text-sm text-stone-400 italic py-4 text-center">Нікого не знайдено</p>}
+      </Card>
+
+      {modalUser && (
+        <UserPermissionsModal userId={modalUser} onClose={() => setModalUser(null)}
+          onChanged={load} onOpenUser={onOpenUser} />
+      )}
+    </>
+  );
+}
+
+function UserPermissionsModal({ userId, onClose, onChanged }) {
+  const { roleName } = useRoles();
+  const confirm = useConfirm();
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState('');
+  const [cat, setCat] = useState('content');
+  const [presets, setPresets] = useState([]);
+  const [presetOpen, setPresetOpen] = useState(false);
+  const [addExpiry, setAddExpiry] = useState({}); // key -> date string draft
+
+  const load = () => apiGet(`/api/admin/users/${userId}/permissions`).then(setData).catch((e) => setErr(e.message));
+  useEffect(() => { load(); apiGet('/api/admin/permission-presets').then(setPresets).catch(() => {}); }, [userId]);
+
+  const refresh = (d) => { setData(d); onChanged?.(); };
+
+  const grant = async (key, expiresAt) => {
+    try { refresh(await apiPost(`/api/admin/users/${userId}/permissions`, { permissionKey: key, expiresAt: expiresAt || null })); }
+    catch (e) { setErr(e.message); }
+  };
+  const revoke = async (key) => {
+    try { refresh(await apiDelete(`/api/admin/users/${userId}/permissions/${key}`)); }
+    catch (e) { setErr(e.message); }
+  };
+  const applyPreset = async (p) => {
+    if (!(await confirm({ title: `Застосувати «${p.name}»?`, description: `Додасться ${p.permissionKeys.length} permissions цьому користувачу.` }))) return;
+    setPresetOpen(false);
+    try { refresh(await apiPost(`/api/admin/users/${userId}/apply-preset`, { presetId: p.id })); }
+    catch (e) { setErr(e.message); }
+  };
+
+  const items = (data?.items || []).filter((i) => i.category === cat);
+  const srcLabel = (i) => {
+    if (i.fromRole) return `від ролі: ${i.roleKey === 'admin' ? 'admin' : (roleName(i.roleKey) || i.roleKey)}`;
+    if (i.individual) {
+      const dt = i.grantedAt ? new Date(i.grantedAt).toLocaleDateString('uk-UA') : '';
+      const exp = i.expiresAt ? ` · до ${new Date(i.expiresAt).toLocaleDateString('uk-UA')}` : '';
+      return `надано ${i.grantedBy || '—'}${dt ? `, ${dt}` : ''}${exp}`;
+    }
+    return '';
+  };
+
+  return (
+    <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-stone-900 rounded-t-2xl sm:rounded-lg w-full sm:max-w-2xl max-h-[88vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-stone-200 dark:border-stone-700">
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">Permissions користувача</h3>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button onClick={() => setPresetOpen((v) => !v)} className="px-3 min-h-[40px] text-sm rounded-md border border-stone-200 dark:border-stone-700 hover:border-rose-300">
+                Застосувати пресет ▾
+              </button>
+              {presetOpen && (
+                <div className="absolute right-0 mt-1 w-64 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-md shadow-lg z-10 py-1">
+                  {presets.length === 0 && <div className="px-3 py-2 text-xs text-stone-400 italic">Пресетів немає</div>}
+                  {presets.map((p) => (
+                    <button key={p.id} onClick={() => applyPreset(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-stone-100 dark:hover:bg-stone-800">
+                      {p.name} <span className="text-xs text-stone-400">({p.permissionKeys.length})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={onClose} className="w-10 h-10 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+          </div>
+        </div>
+
+        <div className="flex gap-1 px-5 pt-3 flex-wrap">
+          {CAT_ORDER.map((c) => (
+            <button key={c} onClick={() => setCat(c)}
+              className={`px-3 min-h-[36px] rounded-md text-xs border ${cat === c ? 'bg-rose-50 text-rose-700 border-rose-200' : 'border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300'}`}>
+              {CAT_LABEL[c]}
+            </button>
+          ))}
+        </div>
+
+        {err && <div className="mx-5 mt-3 p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{err}</div>}
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-2">
+          {!data && <p className="text-sm text-stone-400 italic">Завантаження…</p>}
+          {items.map((i) => (
+            <div key={i.key} className="border border-stone-200 dark:border-stone-700 rounded-lg p-3">
+              <div className="flex items-start gap-3">
+                <button
+                  disabled={i.fromRole}
+                  onClick={() => (i.individual ? revoke(i.key) : grant(i.key, addExpiry[i.key]))}
+                  title={i.fromRole ? 'Надано через роль — зніміть роль, щоб прибрати' : ''}
+                  className={`mt-0.5 w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border ${i.enabled ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-stone-300 dark:border-stone-600'} ${i.fromRole ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                  {i.enabled && <Check className="w-3.5 h-3.5" />}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-stone-800 dark:text-stone-100">{i.name} <code className="text-[10px] text-stone-400">{i.key}</code></div>
+                  {i.description && <div className="text-xs text-stone-500 dark:text-stone-400">{i.description}</div>}
+                  {i.enabled && <div className="text-[11px] text-stone-400 mt-0.5">({srcLabel(i)})</div>}
+                  {!i.enabled && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <input type="date" value={addExpiry[i.key] || ''} onChange={(e) => setAddExpiry({ ...addExpiry, [i.key]: e.target.value })}
+                        className="text-xs border border-stone-200 dark:border-stone-700 rounded px-2 py-1 bg-transparent" />
+                      <span className="text-[11px] text-stone-400">термін (необов.)</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          {data && items.length === 0 && <p className="text-sm text-stone-400 italic">У цій категорії немає прав</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PresetsSubTab() {
+  const confirm = useConfirm();
+  const [presets, setPresets] = useState(null);
+  const [catalog, setCatalog] = useState([]);
+  const [err, setErr] = useState('');
+  const [edit, setEdit] = useState(null); // {id?, name, description, permissionKeys[]}
+
+  const load = () => apiGet('/api/admin/permission-presets').then(setPresets).catch((e) => setErr(e.message));
+  useEffect(() => {
+    load();
+    apiGet('/api/admin/permissions').then((d) => setCatalog(d.permissions || [])).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    if (!edit.name?.trim()) { setErr('Вкажіть назву'); return; }
+    try {
+      if (edit.id) await apiPatch(`/api/admin/permission-presets/${edit.id}`, edit);
+      else await apiPost('/api/admin/permission-presets', edit);
+      setEdit(null); setErr(''); await load();
+    } catch (e) { setErr(e.message); }
+  };
+  const del = async (p) => {
+    if (!(await confirm({ title: 'Видалити пресет?', description: `«${p.name}» буде видалено.` }))) return;
+    try { await apiDelete(`/api/admin/permission-presets/${p.id}`); await load(); } catch (e) { setErr(e.message); }
+  };
+  const toggleKey = (k) => setEdit((s) => ({
+    ...s,
+    permissionKeys: s.permissionKeys.includes(k) ? s.permissionKeys.filter((x) => x !== k) : [...s.permissionKeys, k],
+  }));
+
+  if (err && !presets) return <Card className="p-6 text-rose-600 text-sm">{err}</Card>;
+  if (!presets) return <Card className="p-8 text-center text-stone-400 italic">Завантаження…</Card>;
+
+  return (
+    <Card className="p-4 md:p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg text-stone-800 dark:text-stone-100">Пресети ({presets.length})</h3>
+        <button onClick={() => { setEdit({ name: '', description: '', permissionKeys: [] }); setErr(''); }}
+          className="flex items-center gap-1 px-3 min-h-[40px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+          <Plus className="w-4 h-4" /> Створити
+        </button>
+      </div>
+      {err && <div className="mb-3 p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{err}</div>}
+      <div className="grid sm:grid-cols-2 gap-3">
+        {presets.map((p) => (
+          <div key={p.id} className="border border-stone-200 dark:border-stone-700 rounded-lg p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-sm text-stone-800 dark:text-stone-100">{p.name}</div>
+                {p.description && <div className="text-xs text-stone-500 dark:text-stone-400">{p.description}</div>}
+                <div className="text-[11px] text-stone-400 mt-1">{p.permissionKeys.length} permissions</div>
+              </div>
+              <div className="flex gap-1 flex-shrink-0">
+                <button onClick={() => { setEdit({ ...p }); setErr(''); }} className="text-xs px-2 py-1 rounded border border-stone-200 dark:border-stone-700">Edit</button>
+                <button onClick={() => del(p)} className="w-8 h-8 flex items-center justify-center text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {presets.length === 0 && <p className="text-sm text-stone-400 italic">Пресетів немає</p>}
+      </div>
+
+      {edit && (
+        <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setEdit(null)}>
+          <div className="bg-white dark:bg-stone-900 rounded-t-2xl sm:rounded-lg w-full sm:max-w-lg max-h-[88vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-stone-200 dark:border-stone-700">
+              <h3 className="text-lg text-stone-800 dark:text-stone-100">{edit.id ? 'Редагувати пресет' : 'Новий пресет'}</h3>
+              <button onClick={() => setEdit(null)} className="w-10 h-10 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="Назва"
+                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-transparent" />
+              <input value={edit.description || ''} onChange={(e) => setEdit({ ...edit, description: e.target.value })} placeholder="Опис (необов.)"
+                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-transparent" />
+              {CAT_ORDER.map((c) => (
+                <div key={c}>
+                  <div className="text-xs uppercase tracking-wider text-stone-400 mb-1">{CAT_LABEL[c]}</div>
+                  <div className="space-y-1">
+                    {catalog.filter((p) => p.category === c).map((p) => (
+                      <label key={p.key} className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-200">
+                        <input type="checkbox" className="w-4 h-4" checked={edit.permissionKeys.includes(p.key)} onChange={() => toggleKey(p.key)} />
+                        {p.name} <code className="text-[10px] text-stone-400">{p.key}</code>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="p-5 border-t border-stone-200 dark:border-stone-700">
+              <button onClick={save} className="w-full px-4 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">Зберегти</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

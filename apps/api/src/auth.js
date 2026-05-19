@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { prisma } from './db.js';
-import { isAdmin, isSenior, roleList } from './lib.js';
+import { isAdmin, roleList } from './lib.js';
+import { hasPermission } from './permissions.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'flolux-dev-secret-change-me';
 const JWT_EXPIRES = '30d';
@@ -39,7 +40,7 @@ export async function requireAuth(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      include: { roles: true },
+      include: { roles: true, permissions: true },
     });
     if (!user) return res.status(401).json({ error: 'Користувача не знайдено' });
     req.user = user;
@@ -56,10 +57,11 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
-// Senior gate (admin або hr). Анти-tampering: ролі беремо з БД (req.user),
-// а не з JWT-пейлоада — requireAuth завжди перечитує користувача з include:{roles}.
+// Senior gate — backward-compat. Тепер перевіряє право, а не роль:
+// content.view_all (hr має його через ROLE_PERMISSIONS, admin = '*').
+// Додатково пропускає індивідуально наділених цим правом.
 export function requireSenior(req, res, next) {
-  if (!req.user || !isSenior(req.user)) {
+  if (!req.user || !hasPermission(req.user, 'content.view_all')) {
     return res.status(403).json({ error: 'Доступ лише для HR або адміністратора' });
   }
   next();

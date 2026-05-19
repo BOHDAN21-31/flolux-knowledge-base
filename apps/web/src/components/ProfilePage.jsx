@@ -73,9 +73,11 @@ function PersonalSection({ user, allLocations, onRefresh, onOpenArticle }) {
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
   const [birthday, setBirthday] = useState(null);
+  const [perms, setPerms] = useState([]);
   useEffect(() => {
     let active = true;
     apiGet('/api/users/me/birthday').then((d) => { if (active) setBirthday(d.birthday); }).catch(() => {});
+    apiGet('/api/users/me/permissions').then((d) => { if (active) setPerms(Array.isArray(d) ? d : []); }).catch(() => {});
     return () => { active = false; };
   }, []);
 
@@ -192,6 +194,35 @@ function PersonalSection({ user, allLocations, onRefresh, onOpenArticle }) {
           </div>
         )}
       </div>
+
+      {perms.length > 0 && (
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+          <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4">🔐 Мої права</h3>
+          <div className="space-y-2">
+            {perms.map((p) => {
+              const soon = p.expiresAt && (p.expiresAt - Date.now()) < 14 * 864e5;
+              const src = p.source === 'individual'
+                ? 'індивідуально'
+                : `роль: ${p.source?.startsWith('role:') ? p.source.slice(5) : '—'}`;
+              return (
+                <div key={p.key} className="flex items-center justify-between gap-2 text-sm border-b border-stone-100 dark:border-stone-800 last:border-0 pb-2 last:pb-0">
+                  <span className="text-stone-700 dark:text-stone-200">
+                    {p.name} <code className="text-[10px] text-stone-400">{p.key}</code>
+                  </span>
+                  <span className="text-xs text-stone-400 flex-shrink-0 text-right">
+                    {src}
+                    {p.expiresAt && (
+                      <span className={soon ? 'block text-amber-600' : 'block'}>
+                        {soon ? 'Закінчується ' : 'до '}{new Date(p.expiresAt).toLocaleDateString('uk-UA')}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <ActivityFeed userId={user.id} onOpenArticle={onOpenArticle} title="🕐 Моя активність" />
 

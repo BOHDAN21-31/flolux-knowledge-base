@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
-import { requireAuth, requireHrOrAdmin } from '../auth.js';
+import { requireAuth } from '../auth.js';
+import { hasPermission, requirePermission } from '../permissions.js';
 import { serializeArticle } from '../serialize.js';
-import { wrap, roleList, logAction } from '../lib.js';
+import { wrap, logAction } from '../lib.js';
 import { notifyDigest } from '../services/notifications.js';
 
 const router = Router();
@@ -12,10 +13,9 @@ const articleInclude = { author: true, locations: { include: { location: true } 
 
 // GET /api/digests — усі бачать опубліковані; HR/admin — усі
 router.get('/', requireAuth, wrap(async (req, res) => {
-  const roles = roleList(req.user);
-  const hrOrAdmin = roles.includes('hr') || roles.includes('admin');
+  const canSeeDrafts = hasPermission(req.user, 'content.publish_digest');
   const where = { isDigest: true };
-  if (!hrOrAdmin) {
+  if (!canSeeDrafts) {
     where.status = 'published';
     where.OR = [{ publishAt: null }, { publishAt: { lte: new Date() } }];
   }
@@ -26,7 +26,7 @@ router.get('/', requireAuth, wrap(async (req, res) => {
 }));
 
 // POST /api/digests — створити дайджест (HR/admin)
-router.post('/', requireAuth, requireHrOrAdmin, wrap(async (req, res) => {
+router.post('/', requireAuth, requirePermission('content.publish_digest'), wrap(async (req, res) => {
   const { title, content } = req.body || {};
   if (!title || !content) return res.status(400).json({ error: 'Потрібні title і content' });
 

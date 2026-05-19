@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { wrap, isSenior } from '../lib.js';
+import { wrap } from '../lib.js';
+import { hasPermission } from '../permissions.js';
 
 const router = Router();
 
@@ -31,7 +32,7 @@ router.get('/', requireAuth, wrap(async (req, res) => {
 // GET /api/locations/:id/users — працівники локації
 // видно senior=admin|hr (read-only) або підтвердженому учаснику цієї локації
 router.get('/:id/users', requireAuth, wrap(async (req, res) => {
-  if (!isSenior(req.user)) {
+  if (!hasPermission(req.user, 'content.view_all')) {
     const member = await prisma.userLocation.findUnique({
       where: { userId_locationId: { userId: req.user.id, locationId: req.params.id } },
     });

@@ -41,6 +41,42 @@ model User {
   notificationsReceived Notification[] @relation("notifRecipient")
   notificationsSent     Notification[] @relation("notifActor")
   notificationPref      NotificationPreference?
+  permissions           UserPermission[]
+}
+
+// Каталог дозволів (індивідуальні права поверх ролей).
+model Permission {
+  key         String           @id
+  category    String // content | users | locations | system
+  name        String
+  description String?
+  protected   Boolean          @default(false)
+  users       UserPermission[]
+}
+
+// Індивідуальний дозвіл користувача (опційно з терміном дії).
+model UserPermission {
+  id            String     @id @default(cuid())
+  userId        String
+  permissionKey String
+  grantedBy     String?
+  grantedAt     DateTime   @default(now())
+  expiresAt     DateTime?
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission    Permission @relation(fields: [permissionKey], references: [key], onDelete: Cascade)
+
+  @@unique([userId, permissionKey])
+  @@index([userId])
+}
+
+// Іменований набір дозволів для швидкого застосування.
+model PermissionPreset {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  permissionKeys String[]
+  createdBy      String?
+  createdAt      DateTime @default(now())
 }
 
 model Notification {

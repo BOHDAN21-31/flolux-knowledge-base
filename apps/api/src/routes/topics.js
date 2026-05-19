@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
-import { requireAuth, requireAdmin } from '../auth.js';
-import { wrap, logAction, isSenior, roleList, restrictedRoleKeys } from '../lib.js';
+import { requireAuth } from '../auth.js';
+import { requirePermission, hasPermission } from '../permissions.js';
+import { wrap, logAction, roleList, restrictedRoleKeys } from '../lib.js';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get('/', requireAuth, wrap(async (req, res) => {
   const where = req.query.role ? { roleKey: String(req.query.role) } : {};
   const topics = await prisma.topic.findMany({ where, orderBy: { id: 'asc' } });
   let list = topics;
-  if (!isSenior(req.user)) { // senior=admin|hr бачить розділи всіх ролей
+  if (!hasPermission(req.user, 'content.view_restricted')) { // бачить розділи всіх ролей
     const restricted = await restrictedRoleKeys();
     const mine = new Set(roleList(req.user));
     list = topics.filter((t) => !restricted.has(t.roleKey) || mine.has(t.roleKey));
@@ -27,7 +28,7 @@ router.get('/', requireAuth, wrap(async (req, res) => {
 }));
 
 // POST /api/topics  { id, roleKey, title, description, icon }
-router.post('/', requireAuth, requireAdmin, wrap(async (req, res) => {
+router.post('/', requireAuth, requirePermission('system.manage_topics'), wrap(async (req, res) => {
   const { id, roleKey, title, description, icon } = req.body || {};
   if (!id || !roleKey || !title) {
     return res.status(400).json({ error: 'Потрібні id, roleKey і title' });
@@ -40,7 +41,7 @@ router.post('/', requireAuth, requireAdmin, wrap(async (req, res) => {
 }));
 
 // PATCH /api/topics/:id  { title, description, icon } — admin
-router.patch('/:id', requireAuth, requireAdmin, wrap(async (req, res) => {
+router.patch('/:id', requireAuth, requirePermission('system.manage_topics'), wrap(async (req, res) => {
   const data = {};
   if (req.body?.title !== undefined) data.title = String(req.body.title);
   if (req.body?.description !== undefined) data.description = String(req.body.description);
@@ -51,7 +52,7 @@ router.patch('/:id', requireAuth, requireAdmin, wrap(async (req, res) => {
 }));
 
 // DELETE /api/topics/:id
-router.delete('/:id', requireAuth, requireAdmin, wrap(async (req, res) => {
+router.delete('/:id', requireAuth, requirePermission('system.manage_topics'), wrap(async (req, res) => {
   await prisma.topic.delete({ where: { id: req.params.id } });
   await logAction(req.user.id, 'topic.deleted', 'topic', req.params.id);
   res.json({ ok: true });
