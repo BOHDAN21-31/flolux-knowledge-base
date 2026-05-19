@@ -14,6 +14,7 @@ import suggestionRoutes from './routes/suggestions.js';
 import locationRoutes from './routes/locations.js';
 import userRoutes from './routes/users.js';
 import roleRoutes from './routes/roles.js';
+import searchRoutes from './routes/search.js';
 import uploadRoutes, { UPLOAD_DIR } from './routes/upload.js';
 import webauthnRoutes from './routes/webauthn.js';
 
@@ -36,6 +37,7 @@ app.use('/api/suggestions', suggestionRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/search', searchRoutes);
 app.use('/api/upload', uploadRoutes);
 
 // Невідомий /api маршрут -> 404 JSON (щоб не повертати SPA)

@@ -124,11 +124,30 @@ router.get('/:id', requireAuth, wrap(async (req, res) => {
     .map((s) => serializeSuggestion(s, req.user.id))
     .sort((a, b) => b.ratingAvg - a.ratingAvg || b.createdAt - a.createdAt);
 
+  const bookmarked = !!(await prisma.bookmark.findUnique({
+    where: { userId_articleId: { userId: req.user.id, articleId: article.id } },
+  }));
+
   res.json({
     ...serializeArticle(article),
     comments: article.comments.map(serializeComment),
     suggestions,
+    bookmarked,
   });
+}));
+
+// POST /api/articles/:id/bookmark — toggle закладки
+router.post('/:id/bookmark', requireAuth, wrap(async (req, res) => {
+  const article = await prisma.article.findUnique({ where: { id: req.params.id } });
+  if (!article) return res.status(404).json({ error: 'Статтю не знайдено' });
+  const where = { userId_articleId: { userId: req.user.id, articleId: req.params.id } };
+  const existing = await prisma.bookmark.findUnique({ where });
+  if (existing) {
+    await prisma.bookmark.delete({ where });
+    return res.json({ bookmarked: false });
+  }
+  await prisma.bookmark.create({ data: { userId: req.user.id, articleId: req.params.id } });
+  res.json({ bookmarked: true });
 }));
 
 // POST /api/articles { topicId, section, title, content, tags, locationIds, mediaUrls }

@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Темна тема: базові кольори тла/тексту для ділянок без явного dark: */
+html.dark { color-scheme: dark; }
+html.dark body { background-color: #0c0a09; color: #e7e5e4; }
+
 /* iOS зумить input при focus, якщо font-size < 16px — фіксуємо на мобільному */
 @media (max-width: 767px) {
   input,

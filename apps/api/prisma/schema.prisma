@@ -31,6 +31,7 @@ model User {
   roles         UserRole[]
   suggestionRatings SuggestionRating[]
   auditLogs     AuditLog[]
+  bookmarks     Bookmark[]
 }
 
 model UserRole {
@@ -82,8 +83,21 @@ model Article {
   comments    Comment[]
   suggestions Suggestion[]
   locations   ArticleLocation[]
+  bookmarks   Bookmark[]
 
   @@index([topicId])
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  articleId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, articleId])
+  @@index([userId])
 }
 
 model Comment {

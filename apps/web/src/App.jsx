@@ -1,14 +1,20 @@
 import { useState, useEffect, useRef, createElement } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2 } from 'lucide-react';
+import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2, Sun, Moon, Bookmark } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
 import PublicProfile from './components/PublicProfile';
 import AdminPanel from './components/AdminPanel';
+import GlobalSearch from './components/GlobalSearch';
+import MarkdownEditor from './components/MarkdownEditor';
+import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
 import Stars from './Stars';
 import { userRoles, isAdminUser } from './roles';
 import { RolesProvider, useRoles } from './RolesContext';
 import { iconFor } from './icons';
+import { useTheme } from './theme';
+import { renderMarkdown } from './markdown';
+import { getRecent, addRecent } from './recent';
 
 // ── Навігаційний стек ⇄ URL ──
 function pathForFrame(f) {
@@ -60,7 +66,9 @@ function groupTopics(list) {
 export default function FloluxKB() {
   return (
     <RolesProvider>
-      <AppInner />
+      <ConfirmProvider>
+        <AppInner />
+      </ConfirmProvider>
     </RolesProvider>
   );
 }
@@ -74,6 +82,8 @@ function AppInner() {
   const [dataLoaded, setDataLoaded] = useState(false);
 
   const [authMode, setAuthMode] = useState('login');
+  const { theme, toggleTheme } = useTheme();
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -101,6 +111,18 @@ function AppInner() {
     setStack(TOP_LEVEL.includes(f.type) ? [f] : [{ type: 'home' }, f]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
+
+  // Cmd/Ctrl+K → глобальний пошук
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const refreshMe = async () => {
     const me = await apiGet('/api/users/me');
@@ -292,7 +314,7 @@ function AppInner() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50" style={{ fontFamily: 'Georgia, "Playfair Display", serif' }}>
+    <div className="min-h-screen bg-stone-50 dark:bg-stone-900 dark:bg-stone-950" style={{ fontFamily: 'Georgia, "Playfair Display", serif' }}>
       <Header
         user={currentUser}
         onLogout={handleLogout}
@@ -300,6 +322,9 @@ function AppInner() {
         onProfile={() => reset({ type: 'profile' })}
         view={navView}
         isAdmin={isAdmin}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onOpenSearch={() => setSearchOpen(true)}
       />
 
       <main className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8 pb-24 md:pb-8">
@@ -312,6 +337,17 @@ function AppInner() {
         onNavigate={(v) => reset({ type: v })}
         onProfile={() => reset({ type: 'profile' })}
       />
+
+      <GlobalSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onPick={(kind, item) => {
+          if (kind === 'articles') push({ type: 'article', articleId: item.id });
+          else if (kind === 'users') push({ type: 'publicProfile', userId: item.id });
+          else if (kind === 'topics') push({ type: 'topic', topicId: item.id });
+          else if (kind === 'locations') reset({ type: 'profile', section: 'locations' });
+        }}
+      />
     </div>
   );
 }
@@ -319,7 +355,7 @@ function AppInner() {
 function NotFound({ onBack }) {
   return (
     <div className="text-center py-16">
-      <p className="text-stone-500 italic mb-4">Сторінку не знайдено або вона більше недоступна.</p>
+      <p className="text-stone-500 dark:text-stone-400 italic mb-4">Сторінку не знайдено або вона більше недоступна.</p>
       <button onClick={onBack} className="px-4 min-h-[44px] bg-rose-500 text-white rounded-md text-sm">Повернутися</button>
     </div>
   );
@@ -333,7 +369,7 @@ function Splash({ text }) {
     }}>
       <div className="text-center">
         <Flower2 className="w-10 h-10 text-rose-400 mx-auto mb-3 animate-pulse" strokeWidth={1.5} />
-        <p className="text-stone-500 italic">{text}</p>
+        <p className="text-stone-500 dark:text-stone-400 italic">{text}</p>
       </div>
     </div>
   );
@@ -428,21 +464,21 @@ function AuthScreen({ mode, setMode, onSuccess }) {
     }}>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-white shadow-sm mb-4 border border-rose-200">
+          <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 rounded-full bg-white dark:bg-stone-900 shadow-sm mb-4 border border-rose-200">
             <Flower2 className="w-9 h-9 md:w-10 md:h-10 text-rose-500" strokeWidth={1.5} />
           </div>
-          <h1 className="text-3xl md:text-4xl tracking-wide text-stone-800 mb-2" style={{ letterSpacing: '0.1em' }}>FLOLUX</h1>
-          <p className="text-stone-500 text-sm italic">База знань компанії</p>
+          <h1 className="text-3xl md:text-4xl tracking-wide text-stone-800 dark:text-stone-100 mb-2" style={{ letterSpacing: '0.1em' }}>FLOLUX</h1>
+          <p className="text-stone-500 dark:text-stone-400 text-sm italic">База знань компанії</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 border border-stone-100">
-          <div className="flex gap-1 mb-6 bg-stone-50 rounded-md p-1">
+        <div className="bg-white dark:bg-stone-900 rounded-lg shadow-xl p-6 md:p-8 border border-stone-100 dark:border-stone-800">
+          <div className="flex gap-1 mb-6 bg-stone-50 dark:bg-stone-900 rounded-md p-1">
             <button onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
-              className={`flex-1 min-h-[44px] px-3 text-sm rounded transition ${mode === 'login' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>Вхід</button>
+              className={`flex-1 min-h-[44px] px-3 text-sm rounded transition ${mode === 'login' ? 'bg-white dark:bg-stone-900 shadow-sm text-stone-800 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'}`}>Вхід</button>
             <button onClick={() => { setMode('register'); setError(''); setSuccess(''); }}
-              className={`flex-1 min-h-[44px] px-3 text-sm rounded transition ${mode === 'register' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>Реєстрація</button>
+              className={`flex-1 min-h-[44px] px-3 text-sm rounded transition ${mode === 'register' ? 'bg-white dark:bg-stone-900 shadow-sm text-stone-800 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'}`}>Реєстрація</button>
             <button onClick={() => { setMode('reset'); setError(''); setSuccess(''); }}
-              className={`flex-1 min-h-[44px] px-3 text-sm rounded transition ${mode === 'reset' ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>Відновити</button>
+              className={`flex-1 min-h-[44px] px-3 text-sm rounded transition ${mode === 'reset' ? 'bg-white dark:bg-stone-900 shadow-sm text-stone-800 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'}`}>Відновити</button>
           </div>
 
           {mode === 'login' && (
@@ -455,7 +491,7 @@ function AuthScreen({ mode, setMode, onSuccess }) {
               </button>
               {bioSupported && (
                 <button onClick={handleBioLogin} disabled={busy} type="button"
-                  className="w-full flex items-center justify-center gap-2 border border-stone-300 hover:border-rose-400 text-stone-700 py-3 rounded-md transition text-sm">
+                  className="w-full flex items-center justify-center gap-2 border border-stone-300 hover:border-rose-400 text-stone-700 dark:text-stone-200 py-3 rounded-md transition text-sm">
                   <Fingerprint className="w-4 h-4" /> Увійти через Touch / Face ID
                 </button>
               )}
@@ -468,13 +504,13 @@ function AuthScreen({ mode, setMode, onSuccess }) {
               <Field icon={Mail} label="E-mail" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
               <Field icon={Lock} label="Пароль" type="password" value={form.password} onChange={(v) => setForm({ ...form, password: v })} />
               <div>
-                <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Бажана роль</label>
+                <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Бажана роль</label>
                 <div className="relative">
                   <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                   <select
                     value={form.requestedRole}
                     onChange={(e) => setForm({ ...form, requestedRole: e.target.value })}
-                    className="w-full pl-10 pr-3 py-2.5 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200 text-stone-800 bg-stone-50/50"
+                    className="w-full pl-10 pr-3 py-2.5 border border-stone-200 dark:border-stone-700 rounded-md focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200 text-stone-800 dark:text-stone-100 bg-stone-50/50"
                     style={{ fontFamily: 'system-ui, sans-serif' }}
                   >
                     {registerRoles.map((r) => (
@@ -493,7 +529,7 @@ function AuthScreen({ mode, setMode, onSuccess }) {
 
           {mode === 'reset' && (
             <div className="space-y-4">
-              <p className="text-sm text-stone-600 italic">Введіть e-mail, прив'язаний до акаунту.</p>
+              <p className="text-sm text-stone-600 dark:text-stone-300 italic">Введіть e-mail, прив'язаний до акаунту.</p>
               <Field icon={Mail} label="E-mail" type="email" value={form.resetEmail} onChange={(v) => setForm({ ...form, resetEmail: v })} />
               <button onClick={handleReset} className="w-full bg-rose-500 hover:bg-rose-600 text-white py-3 rounded-md transition tracking-wider text-sm">
                 ВІДНОВИТИ ПАРОЛЬ
@@ -516,14 +552,14 @@ function AuthScreen({ mode, setMode, onSuccess }) {
 function Field({ icon: Icon, label, type, value, onChange, hint, rightIcon: RightIcon, onRightClick }) {
   return (
     <div>
-      <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">{label}</label>
+      <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">{label}</label>
       <div className="relative">
         <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
         <input
           type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full pl-10 pr-10 py-2.5 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200 text-stone-800 bg-stone-50/50"
+          className="w-full pl-10 pr-10 py-2.5 border border-stone-200 dark:border-stone-700 rounded-md focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-200 text-stone-800 dark:text-stone-100 bg-stone-50/50"
           style={{ fontFamily: 'system-ui, sans-serif' }}
         />
         {RightIcon && (
@@ -549,24 +585,25 @@ function HeaderAvatar({ user, primary, size }) {
   );
 }
 
-function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
+function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, theme, onToggleTheme, onOpenSearch }) {
   const { roleName } = useRoles();
   const roles = userRoles(user);
   const primary = isAdmin ? 'admin' : (user.role || roles[0] || null);
   const roleLabel = primary
     ? `${roleName(primary)}${roles.length > 1 ? ` +${roles.length - 1}` : ''}`
     : 'Без ролі';
+  const ThemeIcon = theme === 'dark' ? Sun : Moon;
 
   return (
-    <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-stone-200">
+    <header className="sticky top-0 z-30 bg-white/90 dark:bg-stone-900/90 backdrop-blur border-b border-stone-200 dark:border-stone-700">
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <button onClick={() => onNavigate('home')} className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center border border-rose-200 group-hover:bg-rose-100 transition">
+            <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-500/15 flex items-center justify-center border border-rose-200 dark:border-rose-500/30 group-hover:bg-rose-100 transition">
               <Flower2 className="w-5 h-5 text-rose-500" strokeWidth={1.5} />
             </div>
             <div>
-              <div className="text-xl tracking-widest text-stone-800">FLOLUX</div>
+              <div className="text-xl tracking-widest text-stone-800 dark:text-stone-100">FLOLUX</div>
               <div className="text-xs text-stone-400 italic -mt-0.5">База знань</div>
             </div>
           </button>
@@ -579,13 +616,21 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
           </nav>
         </div>
 
-        {/* Desktop: ім'я + аватар + вихід */}
+        {/* Desktop: пошук + тема + ім'я + аватар + вихід */}
         <div className="hidden md:flex items-center gap-3">
+          <button onClick={onOpenSearch}
+            className="flex items-center gap-2 px-3 min-h-[40px] rounded-md border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-rose-300 text-sm"
+            style={{ fontFamily: 'system-ui, sans-serif' }} title="Пошук">
+            <Search className="w-4 h-4" /> Пошук <kbd className="text-xs text-stone-400">⌘K</kbd>
+          </button>
+          <button onClick={onToggleTheme} className="w-10 h-10 flex items-center justify-center text-stone-500 dark:text-stone-400 dark:text-stone-300 hover:text-rose-500" title="Тема">
+            <ThemeIcon className="w-5 h-5" />
+          </button>
           <button onClick={onProfile} className="text-right group" title="Мій профіль">
-            <div className="text-sm text-stone-700 group-hover:text-rose-600 transition" style={{ fontFamily: 'system-ui, sans-serif' }}>
+            <div className="text-sm text-stone-700 dark:text-stone-200 group-hover:text-rose-600 transition" style={{ fontFamily: 'system-ui, sans-serif' }}>
               {user.name}{user.surname ? ` ${user.surname}` : ''}
             </div>
-            <div className="text-xs text-stone-500">{roleLabel}</div>
+            <div className="text-xs text-stone-500 dark:text-stone-400">{roleLabel}</div>
           </button>
           <button onClick={onProfile} className="w-9 h-9" title="Мій профіль"><HeaderAvatar user={user} primary={primary} size="w-9 h-9" /></button>
           <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-rose-500 transition" title="Вийти">
@@ -593,8 +638,14 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
           </button>
         </div>
 
-        {/* Mobile: лише аватар (→профіль) + вихід; навігація в bottom-nav */}
-        <div className="md:hidden flex items-center gap-1">
+        {/* Mobile: пошук + тема + аватар + вихід; навігація в bottom-nav */}
+        <div className="md:hidden flex items-center gap-0.5">
+          <button onClick={onOpenSearch} className="w-11 h-11 flex items-center justify-center text-stone-500 dark:text-stone-400 dark:text-stone-300" aria-label="Пошук">
+            <Search className="w-5 h-5" />
+          </button>
+          <button onClick={onToggleTheme} className="w-11 h-11 flex items-center justify-center text-stone-500 dark:text-stone-400 dark:text-stone-300" aria-label="Тема">
+            <ThemeIcon className="w-5 h-5" />
+          </button>
           <button onClick={onProfile} className="w-11 h-11 flex items-center justify-center" title="Мій профіль">
             <HeaderAvatar user={user} primary={primary} size="w-9 h-9" />
           </button>
@@ -610,7 +661,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin }) {
 function NavBtn({ active, onClick, icon: Icon, children }) {
   return (
     <button onClick={onClick}
-      className={`flex items-center gap-2 px-4 min-h-[44px] rounded-md text-sm transition ${active ? 'bg-stone-100 text-stone-800' : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'}`}>
+      className={`flex items-center gap-2 px-4 min-h-[44px] rounded-md text-sm transition ${active ? 'bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 hover:bg-stone-50'}`}>
       <Icon className="w-4 h-4" />
       {children}
     </button>
@@ -627,13 +678,13 @@ function MobileBottomNav({ view, isAdmin, onNavigate, onProfile }) {
   if (isAdmin) items.push({ key: 'admin', label: 'Адмін', icon: Shield, onClick: () => onNavigate('admin') });
 
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-stone-200 flex"
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 flex"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {items.map((it) => {
         const active = view === it.key;
         return (
           <button key={it.key} onClick={it.onClick}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-xs transition ${active ? 'text-rose-600' : 'text-stone-500'}`}>
+            className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-xs transition ${active ? 'text-rose-600' : 'text-stone-500 dark:text-stone-400'}`}>
             <it.icon className="w-5 h-5" strokeWidth={active ? 2.2 : 1.7} />
             <span style={{ fontFamily: 'system-ui, sans-serif' }}>{it.label}</span>
           </button>
@@ -646,7 +697,7 @@ function MobileBottomNav({ view, isAdmin, onNavigate, onProfile }) {
 // ============ ГОЛОВНА ============
 function FilterChip({ label, onRemove }) {
   return (
-    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-stone-100 text-stone-700 border border-stone-200">
+    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700">
       {label}
       <button onClick={onRemove} className="hover:text-rose-600"><X className="w-3 h-3" /></button>
     </span>
@@ -665,6 +716,16 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
   const [mobileFilters, setMobileFilters] = useState(false);
   const [results, setResults] = useState([]);
   const [resultsLoading, setResultsLoading] = useState(false);
+  const [bookmarks, setBookmarks] = useState([]);
+  const recent = getRecent();
+
+  useEffect(() => {
+    let active = true;
+    apiGet('/api/users/me/bookmarks')
+      .then((b) => { if (active) setBookmarks(Array.isArray(b) ? b : []); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   if (!isAdmin && roles.length === 0) {
     return (
@@ -672,8 +733,8 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-50 mb-4">
           <AlertCircle className="w-8 h-8 text-amber-500" />
         </div>
-        <h2 className="text-2xl text-stone-800 mb-2">Очікування призначення ролі</h2>
-        <p className="text-stone-500 max-w-md mx-auto italic">
+        <h2 className="text-2xl text-stone-800 dark:text-stone-100 mb-2">Очікування призначення ролі</h2>
+        <p className="text-stone-500 dark:text-stone-400 max-w-md mx-auto italic">
           Ваш акаунт зареєстровано, але адміністратор ще не призначив вам роль.
           Зверніться до керівництва.
         </p>
@@ -738,15 +799,15 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук по статтях…"
-            className="w-full pl-10 pr-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
+            className="w-full pl-10 pr-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
         </div>
         <select value={sort} onChange={(e) => setSort(e.target.value)}
-          className="min-h-[44px] px-3 border border-stone-200 rounded-md text-sm">
+          className="min-h-[44px] px-3 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
           {Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>Сортувати: {v}</option>)}
         </select>
       </div>
       {!isAdmin && publicRoles.length > roles.length && (
-        <label className="flex items-center gap-2 text-sm text-stone-600 mt-3">
+        <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300 mt-3">
           <input type="checkbox" className="w-4 h-4" checked={showAllPublic} onChange={(e) => setShowAllPublic(e.target.checked)} />
           Показати всі публічні ролі
         </label>
@@ -770,7 +831,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
             const on = selLocs.includes(l.id);
             return (
               <button key={l.id} onClick={() => toggleIn(selLocs, setSelLocs, l.id)}
-                className={`px-3 py-1.5 rounded-full text-xs border ${on ? 'text-white border-transparent' : 'text-stone-600 border-stone-300'}`}
+                className={`px-3 py-1.5 rounded-full text-xs border ${on ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}
                 style={on ? { background: l.color || '#a8a29e' } : undefined}>
                 {l.name}
               </button>
@@ -783,10 +844,10 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
 
   return (
     <div>
-      <div className="mb-8 md:mb-10 pb-6 border-b border-stone-200">
+      <div className="mb-8 md:mb-10 pb-6 border-b border-stone-200 dark:border-stone-700">
         <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">Вітаємо</p>
-        <h1 className="text-3xl md:text-4xl text-stone-800 mb-2">{user.name}</h1>
-        <p className="text-stone-500 italic">
+        <h1 className="text-3xl md:text-4xl text-stone-800 dark:text-stone-100 mb-2">{user.name}</h1>
+        <p className="text-stone-500 dark:text-stone-400 italic">
           {isAdmin ? 'Уся бібліотека знань Flolux' : `Ваші ролі — ${roles.map(roleName).join(', ').toLowerCase()}`}
         </p>
       </div>
@@ -801,12 +862,12 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {approved.map((l) => (
-              <div key={l.locationId} className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
-                <span className="flex items-center gap-2 text-stone-800">
+              <div key={l.locationId} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 flex items-center justify-between">
+                <span className="flex items-center gap-2 text-stone-800 dark:text-stone-100">
                   <span className="w-3 h-3 rounded-full" style={{ background: l.color || '#a8a29e' }} />
                   {l.name}{l.isManager ? ' · керівник' : ''}
                 </span>
-                <span className="text-sm text-stone-500">{countFor(l.locationId)} {countFor(l.locationId) === 1 ? 'колега' : 'колег'} на локації</span>
+                <span className="text-sm text-stone-500 dark:text-stone-400">{countFor(l.locationId)} {countFor(l.locationId) === 1 ? 'колега' : 'колег'} на локації</span>
               </div>
             ))}
           </div>
@@ -814,26 +875,26 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
       </div>
 
       {/* P5/P6: панель фільтрів — desktop inline, mobile у sheet */}
-      <div className="hidden md:block bg-white border border-stone-200 rounded-lg p-4 mb-4">
+      <div className="hidden md:block bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 mb-4">
         {filterControls}
       </div>
       <div className="md:hidden mb-4">
         <button onClick={() => setMobileFilters(true)}
-          className="w-full flex items-center justify-center gap-2 min-h-[44px] bg-white border border-stone-200 rounded-md text-sm text-stone-700">
+          className="w-full flex items-center justify-center gap-2 min-h-[44px] bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-md text-sm text-stone-700 dark:text-stone-200">
           <Search className="w-4 h-4" /> Фільтри{activeCount ? ` (${activeCount})` : ''}
         </button>
       </div>
       {mobileFilters && (
         <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-stone-900/50" onClick={() => setMobileFilters(false)} />
-          <div className="relative bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-stone-200 sticky top-0 bg-white">
-              <h3 className="text-lg text-stone-800">Фільтри</h3>
+          <div className="relative bg-white dark:bg-stone-900 rounded-t-2xl max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-stone-200 dark:border-stone-700 sticky top-0 bg-white dark:bg-stone-900">
+              <h3 className="text-lg text-stone-800 dark:text-stone-100">Фільтри</h3>
               <button onClick={() => setMobileFilters(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-4">{filterControls}</div>
-            <div className="p-4 border-t border-stone-200 sticky bottom-0 bg-white flex gap-2">
-              <button onClick={() => { setQ(''); setSelRoles([]); setSelLocs([]); }} className="flex-1 min-h-[44px] bg-stone-100 text-stone-700 rounded-md text-sm">Скинути</button>
+            <div className="p-4 border-t border-stone-200 dark:border-stone-700 sticky bottom-0 bg-white dark:bg-stone-900 flex gap-2">
+              <button onClick={() => { setQ(''); setSelRoles([]); setSelLocs([]); }} className="flex-1 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Скинути</button>
               <button onClick={() => setMobileFilters(false)} className="flex-1 min-h-[44px] bg-rose-500 text-white rounded-md text-sm">Показати</button>
             </div>
           </div>
@@ -845,7 +906,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
           {q.trim() && <FilterChip label={`Пошук: ${q.trim()}`} onRemove={() => setQ('')} />}
           {selRoles.map((rk) => <FilterChip key={rk} label={roleName(rk)} onRemove={() => toggleIn(selRoles, setSelRoles, rk)} />)}
           {selLocs.map((id) => <FilterChip key={id} label={allLocations.find((l) => l.id === id)?.name || id} onRemove={() => toggleIn(selLocs, setSelLocs, id)} />)}
-          <button onClick={() => { setQ(''); setSelRoles([]); setSelLocs([]); }} className="text-xs text-stone-500 hover:text-rose-600">Скинути все</button>
+          <button onClick={() => { setQ(''); setSelRoles([]); setSelLocs([]); }} className="text-xs text-stone-500 dark:text-stone-400 hover:text-rose-600">Скинути все</button>
         </div>
       )}
 
@@ -856,11 +917,11 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
             const rk = topicRoleOf(a);
             return (
               <button key={a.id} onClick={() => onArticleClick(a)}
-                className="block w-full text-left bg-white border border-stone-200 rounded-lg p-4 md:p-5 hover:border-rose-300 hover:shadow-sm transition">
+                className="block w-full text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 md:p-5 hover:border-rose-300 hover:shadow-sm transition">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-stone-800 mb-1">{a.title}</h3>
-                    <p className="text-sm text-stone-500 line-clamp-2 mb-2">{a.content.replace(/[*#]/g, '').substring(0, 160)}</p>
+                    <h3 className="text-stone-800 dark:text-stone-100 mb-1">{a.title}</h3>
+                    <p className="text-sm text-stone-500 dark:text-stone-400 line-clamp-2 mb-2">{a.content.replace(/[*#]/g, '').substring(0, 160)}</p>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-stone-400">
                       {rk && <span className="px-2 py-0.5 rounded-full border" style={roleChipStyle(rk)}>{roleName(rk)}</span>}
                       <span>{new Date(a.createdAt).toLocaleDateString('uk-UA')}</span>
@@ -879,13 +940,43 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
         </div>
       ) : (
         <>
+          {bookmarks.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-3">📑 Мої закладки</h2>
+              <div className="flex gap-3 overflow-x-auto scroll-touch pb-1">
+                {bookmarks.map((b) => (
+                  <button key={b.id} onClick={() => onArticleClick({ id: b.id })}
+                    className="flex-shrink-0 w-64 text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 hover:border-rose-300 transition">
+                    <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-1">{b.title}</div>
+                    <div className="text-xs text-stone-400 line-clamp-2 mt-1" style={{ fontFamily: 'system-ui, sans-serif' }}>{b.excerpt}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {recent.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-3">🕐 Нещодавно переглянуті</h2>
+              <div className="flex gap-3 overflow-x-auto scroll-touch pb-1">
+                {recent.map((r) => (
+                  <button key={r.articleId} onClick={() => onArticleClick({ id: r.articleId })}
+                    className="flex-shrink-0 w-56 text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 hover:border-rose-300 transition">
+                    <div className="flex items-center gap-2 text-xs text-stone-400 mb-1"><Clock className="w-3 h-3" />{new Date(r.viewedAt).toLocaleDateString('uk-UA')}</div>
+                    <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-2">{r.title}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xs uppercase tracking-widest text-stone-400">
               {isAdmin ? 'Усі розділи знань' : 'Розділи знань для ваших ролей'}
             </h2>
             {baseRoles.length > 1 && (
               <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
-                className="text-sm border border-stone-200 rounded-md px-3 py-1.5 bg-white" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                className="text-sm border border-stone-200 dark:border-stone-700 rounded-md px-3 py-1.5 bg-white dark:bg-stone-900" style={{ fontFamily: 'system-ui, sans-serif' }}>
                 <option value="all">Усе</option>
                 {baseRoles.map((r) => <option key={r} value={r}>{roleName(r)}</option>)}
               </select>
@@ -896,7 +987,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
             {shownRoles.map((rk) => (
               <div key={rk}>
                 {(shownRoles.length > 1) && (
-                  <h3 className="text-sm text-stone-600 mb-3 flex items-center gap-2">
+                  <h3 className="text-sm text-stone-600 dark:text-stone-300 mb-3 flex items-center gap-2">
                     <span className="px-2 py-0.5 rounded-full text-xs border" style={roleChipStyle(rk)}>{roleName(rk)}</span>
                   </h3>
                 )}
@@ -906,17 +997,17 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
                     const Ico = iconFor(topic.icon);
                     return (
                       <button key={topic.id} onClick={() => onTopicClick(topic)}
-                        className="text-left bg-white border border-stone-200 rounded-lg p-5 md:p-6 hover:border-rose-300 hover:shadow-md transition group">
+                        className="text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 md:p-6 hover:border-rose-300 hover:shadow-md transition group">
                         <div className="flex items-start gap-4">
                           <div className="w-11 h-11 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0 group-hover:bg-rose-100 transition">
                             <Ico className="w-5 h-5 text-rose-500" />
                           </div>
                           <div className="flex-1">
                             <div className="flex items-start justify-between mb-1">
-                              <h3 className="text-xl text-stone-800 group-hover:text-rose-600 transition">{topic.title}</h3>
+                              <h3 className="text-xl text-stone-800 dark:text-stone-100 group-hover:text-rose-600 transition">{topic.title}</h3>
                               <ChevronRight className="w-5 h-5 text-stone-300 group-hover:text-rose-400 group-hover:translate-x-1 transition" />
                             </div>
-                            <p className="text-sm text-stone-500 italic mb-2">{topic.description}</p>
+                            <p className="text-sm text-stone-500 dark:text-stone-400 italic mb-2">{topic.description}</p>
                             <p className="text-xs text-stone-400">{count} {articleWord(count)}</p>
                           </div>
                         </div>
@@ -937,12 +1028,12 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
               <div className="space-y-3">
                 {recentArticles.map((a) => (
                   <button key={a.id} onClick={() => onArticleClick(a)}
-                    className="block w-full text-left bg-white border border-stone-200 rounded p-4 hover:border-stone-300 transition">
+                    className="block w-full text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded p-4 hover:border-stone-300 transition">
                     <div className="flex items-center gap-2 text-xs text-stone-400 mb-1">
                       <Clock className="w-3 h-3" />
                       {new Date(a.createdAt).toLocaleDateString('uk-UA')}
                     </div>
-                    <h3 className="text-stone-800">{a.title}</h3>
+                    <h3 className="text-stone-800 dark:text-stone-100">{a.title}</h3>
                   </button>
                 ))}
               </div>
@@ -958,17 +1049,17 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, onTopicC
 function TechView({ topics, articles, onTopicClick }) {
   return (
     <div>
-      <div className="mb-10 pb-6 border-b border-stone-200">
+      <div className="mb-10 pb-6 border-b border-stone-200 dark:border-stone-700">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-12 h-12 rounded-lg bg-indigo-50 flex items-center justify-center border border-indigo-200">
             <Wrench className="w-6 h-6 text-indigo-500" />
           </div>
           <div>
             <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">Спеціалізований розділ</p>
-            <h1 className="text-3xl text-stone-800">Технічна база Flolux</h1>
+            <h1 className="text-3xl text-stone-800 dark:text-stone-100">Технічна база Flolux</h1>
           </div>
         </div>
-        <p className="text-stone-500 italic max-w-2xl">
+        <p className="text-stone-500 dark:text-stone-400 italic max-w-2xl">
           Діагностика обладнання, рішення типових проблем з принтерами POS-80,
           MacBook, AnyDesk та іншою технікою. Доступно всім співробітникам.
         </p>
@@ -981,14 +1072,14 @@ function TechView({ topics, articles, onTopicClick }) {
           const Icon = topic.icon ? iconFor(topic.icon, Wrench) : (iconMap[topic.id] || Wrench);
           return (
             <button key={topic.id} onClick={() => onTopicClick(topic)}
-              className="text-left bg-white border border-stone-200 rounded-lg p-5 md:p-6 hover:border-indigo-300 hover:shadow-md transition group">
+              className="text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 md:p-6 hover:border-indigo-300 hover:shadow-md transition group">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-100 transition">
                   <Icon className="w-6 h-6 text-indigo-500" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-xl text-stone-800 mb-2 group-hover:text-indigo-600 transition">{topic.title}</h3>
-                  <p className="text-sm text-stone-500 italic mb-2">{topic.description}</p>
+                  <h3 className="text-xl text-stone-800 dark:text-stone-100 mb-2 group-hover:text-indigo-600 transition">{topic.title}</h3>
+                  <p className="text-sm text-stone-500 dark:text-stone-400 italic mb-2">{topic.description}</p>
                   <p className="text-xs text-stone-400">{count} {articleWord(count)}</p>
                 </div>
               </div>
@@ -1011,21 +1102,21 @@ function TopicView({ topic, articles, onBack, onArticleClick, onCreate }) {
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800 mb-4 min-h-[44px] transition">
+      <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 hover:text-stone-800 mb-4 min-h-[44px] transition">
         <ArrowLeft className="w-4 h-4" /> Повернутися
       </button>
 
-      <div className="mb-6 md:mb-8 pb-6 border-b border-stone-200">
+      <div className="mb-6 md:mb-8 pb-6 border-b border-stone-200 dark:border-stone-700">
         <p className="text-xs uppercase tracking-widest text-stone-400 mb-2">Розділ</p>
-        <h1 className="text-2xl md:text-3xl text-stone-800 mb-2">{topic.title}</h1>
-        <p className="text-stone-500 italic">{topic.description}</p>
+        <h1 className="text-2xl md:text-3xl text-stone-800 dark:text-stone-100 mb-2">{topic.title}</h1>
+        <p className="text-stone-500 dark:text-stone-400 italic">{topic.description}</p>
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input type="text" placeholder="Пошук статей..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 min-h-[44px] py-2.5 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400 bg-white"
+            className="w-full pl-10 pr-4 min-h-[44px] py-2.5 border border-stone-200 dark:border-stone-700 rounded-md focus:outline-none focus:border-rose-400 bg-white dark:bg-stone-900"
             style={{ fontFamily: 'system-ui, sans-serif' }} />
         </div>
         <button onClick={onCreate} className="flex items-center justify-center gap-2 px-4 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md transition text-sm w-full sm:w-auto">
@@ -1041,11 +1132,11 @@ function TopicView({ topic, articles, onBack, onArticleClick, onCreate }) {
         <div className="space-y-3">
           {filtered.map((a) => (
             <button key={a.id} onClick={() => onArticleClick(a)}
-              className="block w-full text-left bg-white border border-stone-200 rounded-lg p-5 hover:border-rose-300 hover:shadow-sm transition group">
+              className="block w-full text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 hover:border-rose-300 hover:shadow-sm transition group">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <h3 className="text-lg text-stone-800 group-hover:text-rose-600 transition mb-1">{a.title}</h3>
-                  <p className="text-sm text-stone-500 line-clamp-2 mb-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                  <h3 className="text-lg text-stone-800 dark:text-stone-100 group-hover:text-rose-600 transition mb-1">{a.title}</h3>
+                  <p className="text-sm text-stone-500 dark:text-stone-400 line-clamp-2 mb-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
                     {a.content.replace(/[*#]/g, '').substring(0, 150)}...
                   </p>
                   <div className="flex items-center gap-3 text-xs text-stone-400">
@@ -1053,7 +1144,7 @@ function TopicView({ topic, articles, onBack, onArticleClick, onCreate }) {
                     {a.tags && a.tags.length > 0 && (
                       <div className="flex gap-1.5">
                         {a.tags.slice(0, 3).map((t) => (
-                          <span key={t} className="px-2 py-0.5 bg-stone-100 rounded text-stone-600">{t}</span>
+                          <span key={t} className="px-2 py-0.5 bg-stone-100 dark:bg-stone-800 rounded text-stone-600 dark:text-stone-300">{t}</span>
                         ))}
                       </div>
                     )}
@@ -1072,6 +1163,7 @@ function TopicView({ topic, articles, onBack, onArticleClick, onCreate }) {
 // ============ СТАТТЯ ============
 function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdated, onOpenUser }) {
   const { roleName, roleChipStyle } = useRoles();
+  const confirm = useConfirm();
   const [article, setArticle] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | ok | error
   const [commentText, setCommentText] = useState('');
@@ -1098,10 +1190,17 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
     setStatus('loading');
     let active = true;
     apiGet(`/api/articles/${articleId}`)
-      .then((a) => { if (active) { setArticle(a); setStatus('ok'); } })
+      .then((a) => { if (active) { setArticle(a); setStatus('ok'); addRecent(a); } })
       .catch((e) => { if (active) { console.error(e); setStatus('error'); } });
     return () => { active = false; };
   }, [articleId]);
+
+  const toggleBookmark = async () => {
+    try {
+      const r = await apiPost(`/api/articles/${articleId}/bookmark`);
+      setArticle((a) => (a ? { ...a, bookmarked: r.bookmarked } : a));
+    } catch (e) { console.error(e); }
+  };
 
   const comments = article?.comments || [];
   const suggestions = article?.suggestions || [];
@@ -1123,6 +1222,10 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
   };
 
   const setSuggStatus = async (sugg, st) => {
+    const ok = await confirm(st === 'approved'
+      ? { title: 'Прийняти пропозицію?', description: 'Пропозицію буде позначено як прийняту.', confirmLabel: 'Прийняти', confirmVariant: 'primary' }
+      : { title: 'Відхилити пропозицію?', description: 'Пропозицію буде відхилено.', confirmLabel: 'Відхилити' });
+    if (!ok) return;
     await apiPatch(`/api/suggestions/${sugg.id}`, { status: st });
     await load();
   };
@@ -1146,7 +1249,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
   if (status === 'error' || !article) {
     return (
       <div className="text-center py-16">
-        <p className="text-stone-500 italic mb-4">Статтю не знайдено або вона недоступна.</p>
+        <p className="text-stone-500 dark:text-stone-400 italic mb-4">Статтю не знайдено або вона недоступна.</p>
         <button onClick={onBack} className="px-4 min-h-[44px] bg-rose-500 text-white rounded-md text-sm">Повернутися</button>
       </div>
     );
@@ -1155,18 +1258,24 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-4">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800 min-h-[44px] transition">
+        <button onClick={onBack} className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 hover:text-stone-800 dark:hover:text-stone-100 min-h-[44px] transition">
           <ArrowLeft className="w-4 h-4" /> Повернутися
         </button>
-        <button onClick={copyLink} className="flex items-center gap-2 text-sm text-stone-500 hover:text-rose-600 min-h-[44px] transition" title="Копіювати посилання">
-          <Link2 className="w-4 h-4" /> {copied ? 'Скопійовано' : 'Копіювати посилання'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={toggleBookmark} className={`flex items-center gap-2 text-sm min-h-[44px] px-2 transition ${article.bookmarked ? 'text-rose-600' : 'text-stone-500 dark:text-stone-400 hover:text-rose-600'}`} title="Закладка">
+            <Bookmark className="w-4 h-4" fill={article.bookmarked ? 'currentColor' : 'none'} />
+            <span className="hidden sm:inline">{article.bookmarked ? 'У закладках' : 'У закладки'}</span>
+          </button>
+          <button onClick={copyLink} className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 hover:text-rose-600 min-h-[44px] px-2 transition" title="Копіювати посилання">
+            <Link2 className="w-4 h-4" /> <span className="hidden sm:inline">{copied ? 'Скопійовано' : 'Копіювати посилання'}</span>
+          </button>
+        </div>
       </div>
 
-      <article className="bg-white border border-stone-200 rounded-lg p-5 md:p-8 mb-6">
+      <article className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 md:p-8 mb-6">
         <>
             <div className="flex items-start justify-between gap-3 mb-4">
-              <h1 className="text-2xl md:text-3xl text-stone-800">{article.title}</h1>
+              <h1 className="text-2xl md:text-3xl text-stone-800 dark:text-stone-100">{article.title}</h1>
               {canEdit && (
                 <button onClick={onEdit} className="w-11 h-11 flex items-center justify-center flex-shrink-0 text-stone-400 hover:text-rose-500 transition" title="Редагувати">
                   <Edit3 className="w-5 h-5" />
@@ -1174,7 +1283,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
               )}
             </div>
 
-            <div className="flex items-center gap-3 text-xs text-stone-400 mb-6 pb-6 border-b border-stone-100">
+            <div className="flex items-center gap-3 text-xs text-stone-400 mb-6 pb-6 border-b border-stone-100 dark:border-stone-800">
               <Clock className="w-3 h-3" />
               {new Date(article.createdAt).toLocaleDateString('uk-UA')}
               {article.authorName && article.author !== 'system' && (
@@ -1188,7 +1297,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
                   <span>·</span>
                   <div className="flex gap-1.5">
                     {article.tags.map((t) => (
-                      <span key={t} className="px-2 py-0.5 bg-stone-100 rounded text-stone-600 flex items-center gap-1">
+                      <span key={t} className="px-2 py-0.5 bg-stone-100 dark:bg-stone-800 rounded text-stone-600 dark:text-stone-300 flex items-center gap-1">
                         <Tag className="w-2.5 h-2.5" />{t}
                       </span>
                     ))}
@@ -1207,16 +1316,16 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
               </div>
             )}
 
-            <div className="prose max-w-none text-stone-700 whitespace-pre-wrap break-words" style={{ fontFamily: 'system-ui, sans-serif', fontSize: '16px', lineHeight: '1.7' }}>
-              {renderMarkdown(article.content)}
-            </div>
+            <div className="prose prose-stone dark:prose-invert max-w-none text-stone-700 dark:text-stone-200 break-words"
+              style={{ fontFamily: 'system-ui, sans-serif', fontSize: '16px', lineHeight: '1.7' }}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(article.content) }} />
 
             {article.mediaUrls && article.mediaUrls.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
                 {article.mediaUrls.map((url) => (
                   /\.(mp4|mov|webm)$/i.test(url)
-                    ? <video key={url} src={url} controls playsInline preload="metadata" className="w-full rounded-lg border border-stone-200" />
-                    : <img key={url} src={url} alt="" className="w-full rounded-lg border border-stone-200 object-cover" />
+                    ? <video key={url} src={url} controls playsInline preload="metadata" className="w-full rounded-lg border border-stone-200 dark:border-stone-700" />
+                    : <img key={url} src={url} alt="" className="w-full rounded-lg border border-stone-200 dark:border-stone-700 object-cover" />
                 ))}
               </div>
             )}
@@ -1224,9 +1333,9 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
       </article>
 
       {/* Пропозиції правок */}
-      <div className="bg-white border border-stone-200 rounded-lg p-5 md:p-6 mb-6">
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 md:p-6 mb-6">
         <div className="flex items-center justify-between gap-2 mb-4">
-          <button onClick={() => setOpenSug((v) => !v)} className="flex items-center gap-2 text-lg text-stone-800 md:cursor-default">
+          <button onClick={() => setOpenSug((v) => !v)} className="flex items-center gap-2 text-lg text-stone-800 dark:text-stone-100 md:cursor-default">
             <Star className="w-4 h-4 text-amber-500" />
             Пропозиції покращень <span className="text-stone-400 text-sm">({suggestions.length})</span>
             <ChevronDown className={`w-4 h-4 text-stone-400 md:hidden transition ${openSug ? 'rotate-180' : ''}`} />
@@ -1244,7 +1353,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
               className="w-full p-3 border border-amber-200 rounded text-sm focus:outline-none focus:border-amber-400" style={{ fontFamily: 'system-ui, sans-serif' }} />
             <div className="flex gap-2 mt-2">
               <button onClick={handleSuggestion} className="px-4 min-h-[44px] bg-amber-500 text-white rounded text-sm">Надіслати</button>
-              <button onClick={() => setShowSuggest(false)} className="px-4 min-h-[44px] bg-stone-100 text-stone-700 rounded text-sm">Скасувати</button>
+              <button onClick={() => setShowSuggest(false)} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded text-sm">Скасувати</button>
             </div>
           </div>
         )}
@@ -1254,10 +1363,10 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
         ) : (
           <div className="space-y-3">
             {suggestions.map((s) => (
-              <div key={s.id} className={`p-4 rounded border ${s.status === 'approved' ? 'bg-emerald-50 border-emerald-200' : s.status === 'rejected' ? 'bg-rose-50 border-rose-200 opacity-60' : 'bg-stone-50 border-stone-200'}`}>
+              <div key={s.id} className={`p-4 rounded border ${s.status === 'approved' ? 'bg-emerald-50 border-emerald-200' : s.status === 'rejected' ? 'bg-rose-50 border-rose-200 opacity-60' : 'bg-stone-50 dark:bg-stone-900 border-stone-200 dark:border-stone-700'}`}>
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <span className="text-sm text-stone-700">{s.authorName}</span>
+                    <span className="text-sm text-stone-700 dark:text-stone-200">{s.authorName}</span>
                     <span className="text-xs text-stone-400 ml-2">{roleName(s.authorRole)}</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1271,7 +1380,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
                     )}
                   </div>
                 </div>
-                <p className="text-sm text-stone-700 mb-2" style={{ fontFamily: 'system-ui, sans-serif' }}>{s.content}</p>
+                <p className="text-sm text-stone-700 dark:text-stone-200 mb-2" style={{ fontFamily: 'system-ui, sans-serif' }}>{s.content}</p>
                 <Stars avg={s.ratingAvg ?? 0} mine={s.myRating ?? null} count={s.ratingCount ?? 0} onRate={(n) => rateSuggestion(s, n)} />
               </div>
             ))}
@@ -1281,10 +1390,10 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
       </div>
 
       {/* Коментарі */}
-      <div className="bg-white border border-stone-200 rounded-lg p-5 md:p-6">
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 md:p-6">
         <button onClick={() => setOpenCom((v) => !v)} className="w-full flex items-center justify-between gap-2 mb-4 md:cursor-default">
-          <span className="text-lg text-stone-800 flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-stone-500" />
+          <span className="text-lg text-stone-800 dark:text-stone-100 flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-stone-500 dark:text-stone-400" />
             Обговорення <span className="text-stone-400 text-sm">({comments.length})</span>
           </span>
           <ChevronDown className={`w-4 h-4 text-stone-400 md:hidden transition ${openCom ? 'rotate-180' : ''}`} />
@@ -1296,17 +1405,17 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
             <p className="text-sm text-stone-400 italic">Поки що немає коментарів</p>
           ) : (
             comments.map((c) => (
-              <div key={c.id} className="flex gap-3 p-3 bg-stone-50 rounded">
+              <div key={c.id} className="flex gap-3 p-3 bg-stone-50 dark:bg-stone-900 rounded">
                 <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs border" style={roleChipStyle(c.authorRole)}>
                   {(c.authorName || '?')[0]}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <button onClick={() => onOpenUser?.(c.author)} className="text-sm text-stone-700 hover:text-rose-600 hover:underline">{c.authorName}</button>
+                    <button onClick={() => onOpenUser?.(c.author)} className="text-sm text-stone-700 dark:text-stone-200 hover:text-rose-600 hover:underline">{c.authorName}</button>
                     <span className="text-xs text-stone-400">{roleName(c.authorRole)}</span>
                     <span className="text-xs text-stone-400">· {new Date(c.createdAt).toLocaleDateString('uk-UA')}</span>
                   </div>
-                  <p className="text-sm text-stone-700" style={{ fontFamily: 'system-ui, sans-serif' }}>{c.content}</p>
+                  <p className="text-sm text-stone-700 dark:text-stone-200" style={{ fontFamily: 'system-ui, sans-serif' }}>{c.content}</p>
                 </div>
               </div>
             ))
@@ -1316,7 +1425,7 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
         <div className="flex gap-2">
           <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleComment()} placeholder="Написати коментар..."
-            className="flex-1 px-4 min-h-[44px] border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} />
+            className="flex-1 px-4 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} />
           <button onClick={handleComment} className="w-12 min-h-[44px] flex items-center justify-center bg-stone-800 hover:bg-stone-900 text-white rounded-md transition flex-shrink-0">
             <Send className="w-4 h-4" />
           </button>
@@ -1325,22 +1434,6 @@ function ArticleView({ articleId, user, isAdmin, onBack, onEdit, onArticleUpdate
       </div>
     </div>
   );
-}
-
-// Простий markdown-рендеринг
-function renderMarkdown(text) {
-  if (!text) return null;
-  const parts = text.split('\n');
-  return parts.map((line, i) => {
-    const processed = line.split(/(\*\*[^*]+\*\*)/).map((part, j) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={j} className="text-stone-900">{part.slice(2, -2)}</strong>;
-      }
-      return part;
-    });
-    if (line.trim() === '') return <br key={i} />;
-    return <p key={i} className="mb-2">{processed}</p>;
-  });
 }
 
 // ============ ФОРМА СТАТТІ (створення + редагування) ============
@@ -1425,38 +1518,37 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch md:items-center justify-center md:p-4">
-      <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
-        <div className="p-4 md:p-6 border-b border-stone-200 flex items-center justify-between sticky top-0 bg-white z-10">
+      <div className="bg-white dark:bg-stone-900 w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
+        <div className="p-4 md:p-6 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between sticky top-0 bg-white dark:bg-stone-900 z-10">
           <div>
             <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">{isEdit ? 'Редагування статті' : 'Нова стаття в розділі'}</p>
-            <h2 className="text-lg md:text-xl text-stone-800">{isEdit ? form.title || 'Без назви' : topic.title}</h2>
+            <h2 className="text-lg md:text-xl text-stone-800 dark:text-stone-100">{isEdit ? form.title || 'Без назви' : topic.title}</h2>
           </div>
           <button onClick={onClose} className="w-11 h-11 flex items-center justify-center flex-shrink-0 text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1">
           <div>
-            <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Заголовок</label>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Заголовок</label>
             <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} placeholder="Назва статті" />
+              className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }} placeholder="Назва статті" />
           </div>
 
           <div>
-            <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Зміст</label>
-            <textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={12}
-              className="w-full px-3 py-2 border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }}
-              placeholder="Текст статті. Можна використовувати **жирний** текст." />
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Зміст</label>
+            <MarkdownEditor value={form.content} onChange={(v) => setForm({ ...form, content: v })}
+              placeholder="Текст статті. Markdown підтримується (тулбар вище)." />
           </div>
 
           <div>
-            <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Теги (через кому)</label>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Теги (через кому)</label>
             <input type="text" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })}
-              className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }}
+              className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md focus:outline-none focus:border-rose-400" style={{ fontFamily: 'system-ui, sans-serif' }}
               placeholder="наприклад: троянди, догляд, поради" />
           </div>
 
           <div>
-            <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">
               Локації <span className="text-stone-400 normal-case">(порожньо = доступно всім за роллю)</span>
             </label>
             {allLocations.length === 0 ? (
@@ -1464,12 +1556,12 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
             ) : (
               <>
                 <input type="text" value={locSearch} onChange={(e) => setLocSearch(e.target.value)} placeholder="Пошук локації…"
-                  className="w-full px-3 min-h-[44px] mb-2 border border-stone-200 rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }} />
+                  className="w-full px-3 min-h-[44px] mb-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }} />
                 {cities.length > 1 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {['all', ...cities].map((c) => (
                       <button key={c} type="button" onClick={() => setCityFilter(c)}
-                        className={`px-3 py-1 rounded-full text-xs border transition ${cityFilter === c ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 border-stone-300'}`}>
+                        className={`px-3 py-1 rounded-full text-xs border transition ${cityFilter === c ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}>
                         {c === 'all' ? 'Всі міста' : c}
                       </button>
                     ))}
@@ -1480,7 +1572,7 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
                     const on = locationIds.includes(l.id);
                     return (
                       <button key={l.id} type="button" onClick={() => toggleLoc(l.id)}
-                        className={`px-3 min-h-[40px] rounded-full text-sm border transition ${on ? 'text-white border-transparent' : 'text-stone-600 border-stone-300 bg-white'}`}
+                        className={`px-3 min-h-[40px] rounded-full text-sm border transition ${on ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300 bg-white dark:bg-stone-900'}`}
                         style={on ? { background: l.color || '#a8a29e' } : undefined}>
                         {l.name}{l.city ? <span className="opacity-70"> · {l.city}</span> : ''}
                       </button>
@@ -1493,10 +1585,10 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
           </div>
 
           <div>
-            <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Фото / відео</label>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Фото / відео</label>
             <input ref={mediaRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={onPickMedia} />
             <button type="button" onClick={() => mediaRef.current?.click()} disabled={uploading}
-              className="flex items-center gap-2 px-4 min-h-[44px] border border-stone-300 hover:border-rose-400 rounded-md text-sm text-stone-700 disabled:opacity-60">
+              className="flex items-center gap-2 px-4 min-h-[44px] border border-stone-300 hover:border-rose-400 rounded-md text-sm text-stone-700 dark:text-stone-200 disabled:opacity-60">
               <Plus className="w-4 h-4" /> {uploading ? 'Завантаження...' : 'Додати фото/відео'}
             </button>
             {mediaUrls.length > 0 && (
@@ -1519,8 +1611,8 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
           {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
         </div>
 
-        <div className="p-4 md:p-6 border-t border-stone-200 flex gap-2 justify-end sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 text-stone-700 rounded-md text-sm">Скасувати</button>
+        <div className="p-4 md:p-6 border-t border-stone-200 dark:border-stone-700 flex gap-2 justify-end sticky bottom-0 bg-white dark:bg-stone-900">
+          <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Скасувати</button>
           <button onClick={handleSave} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
             {busy ? 'Збереження...' : (isEdit ? 'Зберегти зміни' : 'Опублікувати')}
           </button>

@@ -123,6 +123,25 @@ router.delete('/me/locations/:locationId', requireAuth, wrap(async (req, res) =>
   res.json({ ok: true });
 }));
 
+// GET /api/users/me/bookmarks — закладки поточного користувача
+router.get('/me/bookmarks', requireAuth, wrap(async (req, res) => {
+  const rows = await prisma.bookmark.findMany({
+    where: { userId: req.user.id },
+    orderBy: { createdAt: 'desc' },
+    include: { article: { select: { id: true, title: true, topicId: true, content: true, createdAt: true } } },
+  });
+  res.json(rows
+    .filter((b) => b.article)
+    .map((b) => ({
+      id: b.article.id,
+      title: b.article.title,
+      topicId: b.article.topicId,
+      excerpt: String(b.article.content || '').replace(/[*#>`]/g, '').slice(0, 140),
+      createdAt: b.article.createdAt.getTime(),
+      bookmarkedAt: b.createdAt.getTime(),
+    })));
+}));
+
 // GET /api/users/:id/public — публічна картка користувача
 router.get('/:id/public', requireAuth, wrap(async (req, res) => {
   const u = await prisma.user.findUnique({

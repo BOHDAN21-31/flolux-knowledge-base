@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api';
 import { useRoles } from '../RolesContext';
+import { useConfirm } from './ConfirmDialog';
 import { TOPIC_ICON_NAMES, iconFor } from '../icons';
 import Stars from '../Stars';
 
@@ -28,13 +29,13 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
 
   return (
     <div>
-      <div className="mb-6 md:mb-8 pb-6 border-b border-stone-200 flex items-center gap-3">
+      <div className="mb-6 md:mb-8 pb-6 border-b border-stone-200 dark:border-stone-700 flex items-center gap-3">
         <div className="w-12 h-12 rounded-lg bg-rose-50 flex items-center justify-center border border-rose-200">
           <Shield className="w-6 h-6 text-rose-500" />
         </div>
         <div>
           <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">Управління системою</p>
-          <h1 className="text-2xl md:text-3xl text-stone-800">Адмін-панель</h1>
+          <h1 className="text-2xl md:text-3xl text-stone-800 dark:text-stone-100">Адмін-панель</h1>
         </div>
       </div>
 
@@ -43,7 +44,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
         <div className="flex gap-2 overflow-x-auto scroll-touch py-2" style={{ scrollSnapType: 'x proximity' }}>
           {NAV.map((n) => (
             <button key={n.key} onClick={() => setTab(n.key)} style={{ scrollSnapAlign: 'start' }}
-              className={`flex items-center gap-2 px-3 min-h-[44px] rounded-md text-sm whitespace-nowrap flex-shrink-0 transition ${tab === n.key ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'text-stone-600 bg-white border border-stone-200'}`}>
+              className={`flex items-center gap-2 px-3 min-h-[44px] rounded-md text-sm whitespace-nowrap flex-shrink-0 transition ${tab === n.key ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'text-stone-600 dark:text-stone-300 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700'}`}>
               <n.icon className="w-4 h-4" />{n.label}
             </button>
           ))}
@@ -55,7 +56,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
           <nav className="space-y-1">
             {NAV.map((n) => (
               <button key={n.key} onClick={() => setTab(n.key)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition ${tab === n.key ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'text-stone-600 hover:bg-stone-100 border border-transparent'}`}>
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition ${tab === n.key ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'text-stone-600 dark:text-stone-300 hover:bg-stone-100 border border-transparent'}`}>
                 <n.icon className="w-4 h-4" />{n.label}
               </button>
             ))}
@@ -82,7 +83,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
 }
 
 function Card({ children, className = '' }) {
-  return <div className={`bg-white border border-stone-200 rounded-lg ${className}`}>{children}</div>;
+  return <div className={`bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg ${className}`}>{children}</div>;
 }
 
 // ============ ОГЛЯД ============
@@ -111,16 +112,16 @@ function Dashboard({ onJump }) {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stat.map((c) => (
           <button key={c.label} onClick={() => c.to && onJump(c.to)} disabled={!c.to}
-            className="text-left bg-white border border-stone-200 rounded-lg p-5 disabled:cursor-default hover:enabled:border-rose-300 transition">
-            <div className="text-3xl text-stone-800">{c.value}</div>
-            <div className="text-sm text-stone-500 mt-1">{c.label}</div>
+            className="text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 disabled:cursor-default hover:enabled:border-rose-300 transition">
+            <div className="text-3xl text-stone-800 dark:text-stone-100">{c.value}</div>
+            <div className="text-sm text-stone-500 dark:text-stone-400 mt-1">{c.label}</div>
             {c.hint && <div className="text-xs text-amber-600 mt-1">{c.hint}</div>}
           </button>
         ))}
       </div>
 
       <Card className="p-6">
-        <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-4">Користувачі за ролями</h3>
+        <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4">Користувачі за ролями</h3>
         <div className="flex flex-wrap gap-2">
           {roleKeys.filter((k) => s.byRole[k]).map((k) => (
             <span key={k} className="px-3 py-1 rounded-full text-xs border" style={roleChipStyle(k)}>
@@ -132,7 +133,7 @@ function Dashboard({ onJump }) {
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-4">Реєстрації за 30 днів</h3>
+        <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4">Реєстрації за 30 днів</h3>
         <div className="flex items-end gap-0.5 h-32">
           {s.registrations.map((r) => (
             <div key={r.date} className="flex-1 group relative flex flex-col justify-end" title={`${r.date}: ${r.count}`}>
@@ -148,14 +149,14 @@ function Dashboard({ onJump }) {
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-4">Останні дії</h3>
+        <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4">Останні дії</h3>
         {s.recentAudit.length === 0 ? (
           <p className="text-sm text-stone-400 italic">Журнал порожній</p>
         ) : (
           <div className="space-y-2">
             {s.recentAudit.map((a) => (
-              <div key={a.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 text-sm border-b border-stone-100 last:border-0 pb-2 last:pb-0">
-                <span className="text-stone-700 break-words"><b className="text-stone-900">{a.actorName}</b> · <code className="text-xs text-rose-600">{a.action}</code> · {a.targetType}</span>
+              <div key={a.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 text-sm border-b border-stone-100 dark:border-stone-800 last:border-0 pb-2 last:pb-0">
+                <span className="text-stone-700 dark:text-stone-200 break-words"><b className="text-stone-900">{a.actorName}</b> · <code className="text-xs text-rose-600">{a.action}</code> · {a.targetType}</span>
                 <span className="text-xs text-stone-400 flex-shrink-0">{fmtDate(a.createdAt)}</span>
               </div>
             ))}
@@ -191,7 +192,7 @@ function RoleChips({ user, onAdd, onRemove }) {
         </select>
       ) : (
         available.length > 0 && (
-          <button onClick={() => setAdding(true)} className="text-xs px-2 py-0.5 rounded-full border border-dashed border-stone-300 text-stone-500 hover:border-rose-400 hover:text-rose-600 flex items-center gap-1">
+          <button onClick={() => setAdding(true)} className="text-xs px-2 py-0.5 rounded-full border border-dashed border-stone-300 text-stone-500 dark:text-stone-400 hover:border-rose-400 hover:text-rose-600 flex items-center gap-1">
             <Plus className="w-3 h-3" />роль
           </button>
         )
@@ -201,6 +202,7 @@ function RoleChips({ user, onAdd, onRemove }) {
 }
 
 function UsersTab({ allLocations }) {
+  const confirm = useConfirm();
   const { roleName, roleKeys } = useRoles();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -228,9 +230,17 @@ function UsersTab({ allLocations }) {
     try { await apiDelete(`/api/admin/users/${id}/roles/${role}`); await load(); }
     catch (e) { alert(e.message); }
   };
-  const setApproved = async (id, approved) => { await apiPatch(`/api/admin/users/${id}`, { approved }); await load(); };
+  const setApproved = async (id, approved) => {
+    if (!approved) {
+      const ok = await confirm({ title: 'Заблокувати користувача?', description: 'Користувач втратить доступ до системи.', confirmLabel: 'Заблокувати' });
+      if (!ok) return;
+    }
+    await apiPatch(`/api/admin/users/${id}`, { approved });
+    await load();
+  };
   const delUser = async (id) => {
-    if (!window.confirm('Видалити користувача? Дію не можна скасувати.')) return;
+    const ok = await confirm({ title: 'Видалити користувача?', description: 'Дію не можна скасувати.' });
+    if (!ok) return;
     try { await apiDelete(`/api/admin/users/${id}`); await load(); } catch (e) { alert(e.message); }
   };
 
@@ -246,7 +256,10 @@ function UsersTab({ allLocations }) {
   const toggleSel = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const bulk = async (action) => {
     if (sel.size === 0) return;
-    if (action === 'delete' && !window.confirm(`Видалити ${sel.size} користувач(ів)?`)) return;
+    if (action === 'delete') {
+      const ok = await confirm({ title: `Видалити ${sel.size} користувач(ів)?`, description: 'Дію не можна скасувати.' });
+      if (!ok) return;
+    }
     try {
       await apiPost('/api/admin/users/bulk', { action, ids: [...sel] });
       setSel(new Set()); await load();
@@ -261,18 +274,18 @@ function UsersTab({ allLocations }) {
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук за ім'ям або e-mail"
-            className="w-full pl-10 pr-3 py-2 border border-stone-200 rounded-md text-sm" />
+            className="w-full pl-10 pr-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
         </div>
-        <select value={fRole} onChange={(e) => setFRole(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-md text-sm">
+        <select value={fRole} onChange={(e) => setFRole(e.target.value)} className="px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
           <option value="">Усі ролі</option>
           {roleKeys.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
         </select>
-        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-md text-sm">
+        <select value={fStatus} onChange={(e) => setFStatus(e.target.value)} className="px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
           <option value="">Будь-який статус</option>
           <option value="pending">Очікують</option>
           <option value="approved">Підтверджені</option>
         </select>
-        <select value={fLoc} onChange={(e) => setFLoc(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-md text-sm">
+        <select value={fLoc} onChange={(e) => setFLoc(e.target.value)} className="px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
           <option value="">Усі локації</option>
           {allLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
@@ -280,32 +293,32 @@ function UsersTab({ allLocations }) {
 
       {sel.size > 0 && (
         <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-md px-4 py-2 text-sm">
-          <span className="text-stone-700">Вибрано: {sel.size}</span>
+          <span className="text-stone-700 dark:text-stone-200">Вибрано: {sel.size}</span>
           <button onClick={() => bulk('approve')} className="px-3 py-1 bg-emerald-500 text-white rounded text-xs">Підтвердити вибраних</button>
           <button onClick={() => bulk('delete')} className="px-3 py-1 bg-rose-500 text-white rounded text-xs">Видалити</button>
-          <button onClick={() => setSel(new Set())} className="text-stone-500 text-xs ml-auto">Скинути</button>
+          <button onClick={() => setSel(new Set())} className="text-stone-500 dark:text-stone-400 text-xs ml-auto">Скинути</button>
         </div>
       )}
 
       {/* Desktop: таблиця */}
       <Card className="overflow-hidden hidden md:block">
         <table className="w-full">
-          <thead className="bg-stone-50 border-b border-stone-200">
+          <thead className="bg-stone-50 dark:bg-stone-900 border-b border-stone-200 dark:border-stone-700">
             <tr>
               <th className="w-10 px-4 py-3"></th>
-              <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Користувач</th>
-              <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Ролі</th>
-              <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Статус</th>
-              <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Дії</th>
+              <th className="text-left text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 px-4 py-3">Користувач</th>
+              <th className="text-left text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 px-4 py-3">Ролі</th>
+              <th className="text-left text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 px-4 py-3">Статус</th>
+              <th className="text-left text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 px-4 py-3">Дії</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((u) => (
-              <tr key={u.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50/50">
+              <tr key={u.id} className="border-b border-stone-100 dark:border-stone-800 last:border-0 hover:bg-stone-50/50">
                 <td className="px-4 py-3"><input type="checkbox" checked={sel.has(u.id)} onChange={() => toggleSel(u.id)} /></td>
                 <td className="px-4 py-3 cursor-pointer" onClick={() => setDetail(u.id)} style={{ fontFamily: 'system-ui, sans-serif' }}>
-                  <div className="text-sm text-stone-800">{u.name}{u.surname ? ` ${u.surname}` : ''}</div>
-                  <div className="text-xs text-stone-500">{u.email}</div>
+                  <div className="text-sm text-stone-800 dark:text-stone-100">{u.name}{u.surname ? ` ${u.surname}` : ''}</div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400">{u.email}</div>
                   {u.requestedRole && <div className="text-xs text-stone-400">бажана: {roleName(u.requestedRole)}</div>}
                 </td>
                 <td className="px-4 py-3"><RoleChips user={u} onAdd={addRole} onRemove={removeRole} /></td>
@@ -317,7 +330,7 @@ function UsersTab({ allLocations }) {
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
                     {!u.approved && <button onClick={() => setApproved(u.id, true)} className="text-xs px-3 py-1 bg-emerald-500 text-white rounded">Підтвердити</button>}
-                    {u.approved && !u.roles?.includes('admin') && <button onClick={() => setApproved(u.id, false)} className="text-xs px-3 py-1 bg-stone-100 text-stone-700 rounded">Заблокувати</button>}
+                    {u.approved && !u.roles?.includes('admin') && <button onClick={() => setApproved(u.id, false)} className="text-xs px-3 py-1 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded">Заблокувати</button>}
                     <button onClick={() => delUser(u.id)} className="w-10 h-10 flex items-center justify-center text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </td>
@@ -335,8 +348,8 @@ function UsersTab({ allLocations }) {
             <div className="flex items-start gap-3">
               <input type="checkbox" className="mt-1 w-4 h-4" checked={sel.has(u.id)} onChange={() => toggleSel(u.id)} />
               <button onClick={() => setDetail(u.id)} className="flex-1 text-left" style={{ fontFamily: 'system-ui, sans-serif' }}>
-                <div className="text-sm text-stone-800">{u.name}{u.surname ? ` ${u.surname}` : ''}</div>
-                <div className="text-xs text-stone-500 break-all">{u.email}</div>
+                <div className="text-sm text-stone-800 dark:text-stone-100">{u.name}{u.surname ? ` ${u.surname}` : ''}</div>
+                <div className="text-xs text-stone-500 dark:text-stone-400 break-all">{u.email}</div>
                 {u.requestedRole && <div className="text-xs text-stone-400">бажана: {roleName(u.requestedRole)}</div>}
               </button>
               {u.approved
@@ -344,9 +357,9 @@ function UsersTab({ allLocations }) {
                 : <span className="text-xs px-2 py-1 bg-amber-50 text-amber-700 rounded border border-amber-200 flex-shrink-0">Очікує</span>}
             </div>
             <div className="mt-3"><RoleChips user={u} onAdd={addRole} onRemove={removeRole} /></div>
-            <div className="mt-3 pt-3 border-t border-stone-100 flex gap-2">
+            <div className="mt-3 pt-3 border-t border-stone-100 dark:border-stone-800 flex gap-2">
               {!u.approved && <button onClick={() => setApproved(u.id, true)} className="flex-1 min-h-[44px] text-sm bg-emerald-500 text-white rounded">Підтвердити</button>}
-              {u.approved && !u.roles?.includes('admin') && <button onClick={() => setApproved(u.id, false)} className="flex-1 min-h-[44px] text-sm bg-stone-100 text-stone-700 rounded">Заблокувати</button>}
+              {u.approved && !u.roles?.includes('admin') && <button onClick={() => setApproved(u.id, false)} className="flex-1 min-h-[44px] text-sm bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded">Заблокувати</button>}
               <button onClick={() => delUser(u.id)} className="w-12 min-h-[44px] flex items-center justify-center bg-rose-50 text-rose-500 rounded"><Trash2 className="w-4 h-4" /></button>
             </div>
           </Card>
@@ -366,26 +379,26 @@ function UserDetailModal({ id, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch md:items-center justify-center md:p-4" onClick={onClose}>
-      <div className="bg-white w-full h-full md:h-auto md:max-w-lg md:max-h-[85vh] overflow-y-auto rounded-none md:rounded-lg p-5 md:p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4 sticky -top-5 md:-top-6 bg-white py-2 -my-2">
-          <h3 className="text-xl text-stone-800">Деталі користувача</h3>
+      <div className="bg-white dark:bg-stone-900 w-full h-full md:h-auto md:max-w-lg md:max-h-[85vh] overflow-y-auto rounded-none md:rounded-lg p-5 md:p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4 sticky -top-5 md:-top-6 bg-white dark:bg-stone-900 py-2 -my-2">
+          <h3 className="text-xl text-stone-800 dark:text-stone-100">Деталі користувача</h3>
           <button onClick={onClose} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
         </div>
         {!u ? <p className="text-stone-400 italic">Завантаження…</p> : (
           <div className="space-y-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
             <div>
-              <div className="text-lg text-stone-800">{u.name}{u.surname ? ` ${u.surname}` : ''}</div>
-              <div className="text-sm text-stone-500">{u.email}{u.phone ? ` · ${u.phone}` : ''}</div>
+              <div className="text-lg text-stone-800 dark:text-stone-100">{u.name}{u.surname ? ` ${u.surname}` : ''}</div>
+              <div className="text-sm text-stone-500 dark:text-stone-400">{u.email}{u.phone ? ` · ${u.phone}` : ''}</div>
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-stone-500 mb-1">Ролі</div>
+              <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Ролі</div>
               <div className="flex flex-wrap gap-1.5">
                 {(u.roles || []).map((r) => <span key={r} className="text-xs px-2 py-0.5 rounded-full border" style={roleChipStyle(r)}>{roleName(r)}</span>)}
                 {(u.roles || []).length === 0 && <span className="text-xs text-stone-400 italic">немає</span>}
               </div>
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-stone-500 mb-1">Локації</div>
+              <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Локації</div>
               {(u.locations || []).length === 0 ? <span className="text-xs text-stone-400 italic">немає</span> : (
                 <div className="flex flex-wrap gap-1.5">
                   {u.locations.map((l) => (
@@ -397,10 +410,10 @@ function UserDetailModal({ id, onClose }) {
               )}
             </div>
             <div>
-              <div className="text-xs uppercase tracking-wider text-stone-500 mb-1">Статті ({u.articles?.length || 0})</div>
+              <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Статті ({u.articles?.length || 0})</div>
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {(u.articles || []).map((a) => (
-                  <div key={a.id} className="text-sm text-stone-700 flex items-center gap-2"><FileText className="w-3 h-3 text-stone-400" />{a.title}</div>
+                  <div key={a.id} className="text-sm text-stone-700 dark:text-stone-200 flex items-center gap-2"><FileText className="w-3 h-3 text-stone-400" />{a.title}</div>
                 ))}
                 {(u.articles || []).length === 0 && <span className="text-xs text-stone-400 italic">немає</span>}
               </div>
@@ -416,6 +429,7 @@ function UserDetailModal({ id, onClose }) {
 const PRESET_CITIES = ['Київ', 'Львів', 'Івано-Франківськ', 'Рівне'];
 
 function LocationsTab({ allLocations, reloadLocations }) {
+  const confirm = useConfirm();
   const [error, setError] = useState('');
   const [openId, setOpenId] = useState(null);
   const [workers, setWorkers] = useState([]);
@@ -450,7 +464,7 @@ function LocationsTab({ allLocations, reloadLocations }) {
   };
   const removeLocation = async (lid) => {
     setError('');
-    if (!window.confirm('Видалити локацію?')) return;
+    if (!(await confirm({ title: 'Видалити локацію?', description: 'Локацію буде видалено остаточно.' }))) return;
     try { await apiDelete(`/api/admin/locations/${lid}`); if (openId === lid) setOpenId(null); await reloadLocations(); }
     catch (e) { setError(e.message); }
   };
@@ -466,7 +480,7 @@ function LocationsTab({ allLocations, reloadLocations }) {
     <div className="space-y-6">
       <Card className="p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg text-stone-800">Локації ({allLocations.length})</h3>
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">Локації ({allLocations.length})</h3>
           <button onClick={() => setAddOpen(true)} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
             <Plus className="w-4 h-4" /> Додати
           </button>
@@ -479,33 +493,33 @@ function LocationsTab({ allLocations, reloadLocations }) {
               <div className="text-xs uppercase tracking-wider text-stone-400 mb-2">{city}</div>
               <div className="space-y-2">
                 {locs.map((l) => (
-                  <div key={l.id} className={`border rounded ${l.active === false ? 'border-stone-200 bg-stone-50 opacity-70' : 'border-stone-200'}`}>
+                  <div key={l.id} className={`border rounded ${l.active === false ? 'border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900 opacity-70' : 'border-stone-200 dark:border-stone-700'}`}>
                     <div className="flex items-center justify-between p-3 gap-2">
                       <button onClick={() => (openId === l.id ? setOpenId(null) : openLocation(l.id))} className="flex items-center gap-2 text-left min-w-0">
                         <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: l.color || '#a8a29e' }} />
-                        <span className="text-sm text-stone-800 truncate">{l.name}</span>
+                        <span className="text-sm text-stone-800 dark:text-stone-100 truncate">{l.name}</span>
                         <span className="text-xs text-stone-400 flex-shrink-0">{l.userCount} люд.</span>
                         <ChevronRight className={`w-4 h-4 text-stone-300 transition flex-shrink-0 ${openId === l.id ? 'rotate-90' : ''}`} />
                       </button>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button onClick={() => toggleActive(l)} title={l.active === false ? 'Активувати' : 'Деактивувати'}
-                          className={`px-2 min-h-[36px] rounded text-xs border ${l.active === false ? 'border-stone-300 text-stone-500' : 'border-emerald-300 text-emerald-700 bg-emerald-50'}`}>
+                          className={`px-2 min-h-[36px] rounded text-xs border ${l.active === false ? 'border-stone-300 text-stone-500 dark:text-stone-400' : 'border-emerald-300 text-emerald-700 bg-emerald-50'}`}>
                           {l.active === false ? 'Неактивна' : 'Активна'}
                         </button>
                         <button onClick={() => removeLocation(l.id)} className="w-9 h-9 flex items-center justify-center text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
                     {openId === l.id && (
-                      <div className="border-t border-stone-100 p-3 bg-stone-50">
-                        {l.address && <div className="text-xs text-stone-500 mb-2">{l.address}</div>}
+                      <div className="border-t border-stone-100 dark:border-stone-800 p-3 bg-stone-50 dark:bg-stone-900">
+                        {l.address && <div className="text-xs text-stone-500 dark:text-stone-400 mb-2">{l.address}</div>}
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs uppercase tracking-wider text-stone-500">Працівники</span>
+                          <span className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400">Працівники</span>
                           <button onClick={openAssign} className="text-xs text-rose-500 hover:text-rose-600 flex items-center gap-1"><Plus className="w-3 h-3" />Призначити</button>
                         </div>
                         {workers.length === 0 ? <p className="text-sm text-stone-400 italic">Немає працівників</p> : workers.map((w) => (
                           <div key={w.userLocationId} className="flex items-center justify-between py-1.5 text-sm">
                             <span>{w.name}{w.surname ? ` ${w.surname}` : ''} {w.isManager && <span className="text-xs text-purple-600">· керівник</span>} {!w.approved && <span className="text-xs text-amber-600">· очікує</span>}</span>
-                            <button onClick={() => detach(w.userId)} className="text-xs text-stone-500 hover:text-rose-600">Зняти</button>
+                            <button onClick={() => detach(w.userId)} className="text-xs text-stone-500 dark:text-stone-400 hover:text-rose-600">Зняти</button>
                           </div>
                         ))}
                       </div>
@@ -520,23 +534,23 @@ function LocationsTab({ allLocations, reloadLocations }) {
 
       {addOpen && (
         <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
-          <div className="bg-white rounded-t-2xl sm:rounded-lg w-full sm:max-w-md p-5 sm:p-6" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          <div className="bg-white dark:bg-stone-900 rounded-t-2xl sm:rounded-lg w-full sm:max-w-md p-5 sm:p-6" style={{ fontFamily: 'system-ui, sans-serif' }}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg text-stone-800" style={{ fontFamily: 'Georgia, serif' }}>Додати локацію</h3>
+              <h3 className="text-lg text-stone-800 dark:text-stone-100" style={{ fontFamily: 'Georgia, serif' }}>Додати локацію</h3>
               <button onClick={() => setAddOpen(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
             </div>
             <div className="space-y-3">
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва" className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
-              <select value={form.cityPreset} onChange={(e) => setForm({ ...form, cityPreset: e.target.value })} className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm">
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва" className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
+              <select value={form.cityPreset} onChange={(e) => setForm({ ...form, cityPreset: e.target.value })} className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm">
                 {PRESET_CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 <option value="other">Інше місто…</option>
               </select>
               {form.cityPreset === 'other' && (
-                <input value={form.cityOther} onChange={(e) => setForm({ ...form, cityOther: e.target.value })} placeholder="Назва міста" className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
+                <input value={form.cityOther} onChange={(e) => setForm({ ...form, cityOther: e.target.value })} placeholder="Назва міста" className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
               )}
-              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Адреса (необов.)" className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
-              <label className="flex items-center gap-3 text-sm text-stone-600">
-                Колір <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 w-16 border border-stone-200 rounded-md" />
+              <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Адреса (необов.)" className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
+              <label className="flex items-center gap-3 text-sm text-stone-600 dark:text-stone-300">
+                Колір <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 w-16 border border-stone-200 dark:border-stone-700 rounded-md" />
               </label>
               {error && <div className="p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
               <button onClick={addLocation} className="w-full px-4 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">Додати локацію</button>
@@ -547,17 +561,17 @@ function LocationsTab({ allLocations, reloadLocations }) {
 
       {assignOpen && (
         <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
-          <div className="bg-white rounded-t-2xl sm:rounded-lg w-full sm:max-w-md p-5 sm:p-6">
+          <div className="bg-white dark:bg-stone-900 rounded-t-2xl sm:rounded-lg w-full sm:max-w-md p-5 sm:p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg text-stone-800">Призначити користувача</h3>
+              <h3 className="text-lg text-stone-800 dark:text-stone-100">Призначити користувача</h3>
               <button onClick={() => setAssignOpen(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
             </div>
             <select value={assign.userId} onChange={(e) => setAssign({ ...assign, userId: e.target.value })}
-              className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md mb-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md mb-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
               <option value="">— оберіть користувача —</option>
               {users.map((u) => <option key={u.id} value={u.id}>{u.name}{u.surname ? ` ${u.surname}` : ''} ({u.email})</option>)}
             </select>
-            <label className="flex items-center gap-2 text-sm text-stone-600 mb-4 min-h-[44px]">
+            <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300 mb-4 min-h-[44px]">
               <input type="checkbox" className="w-4 h-4" checked={assign.isManager} onChange={(e) => setAssign({ ...assign, isManager: e.target.checked })} />
               Керівник локації
             </label>
@@ -602,18 +616,18 @@ function RequestsTab({ reloadLocations }) {
   return (
     <div className="space-y-6">
       <Card className="p-6">
-        <h3 className="text-lg text-stone-800 mb-4">Запити на локації ({locReqs.length})</h3>
+        <h3 className="text-lg text-stone-800 dark:text-stone-100 mb-4">Запити на локації ({locReqs.length})</h3>
         {locReqs.length === 0 ? <p className="text-sm text-stone-400 italic">Немає запитів</p> : (
           <div className="space-y-3">
             {locReqs.map((r) => (
-              <div key={r.id} className="p-4 bg-stone-50 rounded border border-stone-200 flex items-center justify-between">
+              <div key={r.id} className="p-4 bg-stone-50 dark:bg-stone-900 rounded border border-stone-200 dark:border-stone-700 flex items-center justify-between">
                 <div className="text-sm">
-                  <span className="text-stone-800">{r.userName}</span><span className="text-stone-400"> → </span>
+                  <span className="text-stone-800 dark:text-stone-100">{r.userName}</span><span className="text-stone-400"> → </span>
                   <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: r.locationColor || '#a8a29e' }} />{r.locationName}</span>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => decideLoc(r.id, 'approved')} className="px-3 py-1 bg-emerald-500 text-white rounded text-xs">Прийняти</button>
-                  <button onClick={() => decideLoc(r.id, 'rejected')} className="px-3 py-1 bg-stone-200 text-stone-700 rounded text-xs">Відхилити</button>
+                  <button onClick={() => decideLoc(r.id, 'rejected')} className="px-3 py-1 bg-stone-200 text-stone-700 dark:text-stone-200 rounded text-xs">Відхилити</button>
                 </div>
               </div>
             ))}
@@ -622,18 +636,18 @@ function RequestsTab({ reloadLocations }) {
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-lg text-stone-800 mb-4">Запити на ролі ({roleReqs.length})</h3>
+        <h3 className="text-lg text-stone-800 dark:text-stone-100 mb-4">Запити на ролі ({roleReqs.length})</h3>
         {roleReqs.length === 0 ? <p className="text-sm text-stone-400 italic">Немає запитів</p> : (
           <div className="space-y-3">
             {roleReqs.map((r) => (
-              <div key={r.userId} className="p-4 bg-stone-50 rounded border border-stone-200 flex items-center justify-between">
+              <div key={r.userId} className="p-4 bg-stone-50 dark:bg-stone-900 rounded border border-stone-200 dark:border-stone-700 flex items-center justify-between">
                 <div className="text-sm">
-                  <span className="text-stone-800">{r.userName}</span> <span className="text-xs text-stone-500">({r.email})</span>
-                  <span className="text-stone-400"> → </span><span className="text-stone-700">{roleName(r.requestedRole)}</span>
+                  <span className="text-stone-800 dark:text-stone-100">{r.userName}</span> <span className="text-xs text-stone-500 dark:text-stone-400">({r.email})</span>
+                  <span className="text-stone-400"> → </span><span className="text-stone-700 dark:text-stone-200">{roleName(r.requestedRole)}</span>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => approveRole(r)} className="px-3 py-1 bg-emerald-500 text-white rounded text-xs">Підтвердити + роль</button>
-                  <button onClick={() => rejectRole(r)} className="px-3 py-1 bg-stone-200 text-stone-700 rounded text-xs">Відхилити</button>
+                  <button onClick={() => rejectRole(r)} className="px-3 py-1 bg-stone-200 text-stone-700 dark:text-stone-200 rounded text-xs">Відхилити</button>
                 </div>
               </div>
             ))}
@@ -646,6 +660,7 @@ function RequestsTab({ reloadLocations }) {
 
 // ============ КОНТЕНТ ============
 function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
+  const confirm = useConfirm();
   const { roleName, roleKeys, roleChipStyle } = useRoles();
   const allTopics = useMemo(() => Object.values(topicsMap).flat(), [topicsMap]);
   const topicById = useMemo(() => Object.fromEntries(allTopics.map((t) => [t.id, t])), [allTopics]);
@@ -667,7 +682,8 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
 
   const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const bulkDelete = async () => {
-    if (sel.size === 0 || !window.confirm(`Видалити ${sel.size} статей?`)) return;
+    if (sel.size === 0) return;
+    if (!(await confirm({ title: `Видалити ${sel.size} статей?`, description: 'Дію не можна скасувати.' }))) return;
     await apiPost('/api/admin/articles/bulk', { action: 'delete', ids: [...sel] });
     setSel(new Set()); await reloadArticles();
   };
@@ -682,13 +698,13 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
       <Card className="p-4 flex flex-wrap items-center gap-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук за назвою / автором" className="w-full pl-10 pr-3 py-2 border border-stone-200 rounded-md text-sm" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук за назвою / автором" className="w-full pl-10 pr-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
         </div>
-        <select value={fRole} onChange={(e) => setFRole(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-md text-sm">
+        <select value={fRole} onChange={(e) => setFRole(e.target.value)} className="px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
           <option value="">Усі ролі</option>
           {roleKeys.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
         </select>
-        <select value={fLoc} onChange={(e) => setFLoc(e.target.value)} className="px-3 py-2 border border-stone-200 rounded-md text-sm">
+        <select value={fLoc} onChange={(e) => setFLoc(e.target.value)} className="px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
           <option value="">Усі локації</option>
           {allLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
@@ -699,7 +715,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
 
       {sel.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 bg-rose-50 border border-rose-200 rounded-md px-4 py-2 text-sm" style={{ fontFamily: 'system-ui, sans-serif' }}>
-          <span className="text-stone-700">Вибрано: {sel.size}</span>
+          <span className="text-stone-700 dark:text-stone-200">Вибрано: {sel.size}</span>
           <button onClick={bulkDelete} className="px-3 py-1 bg-rose-500 text-white rounded text-xs">Видалити вибрані</button>
           <select value={moveTopic} onChange={(e) => setMoveTopic(e.target.value)} className="px-2 py-1 border border-stone-300 rounded text-xs">
             <option value="">Перенести в розділ…</option>
@@ -710,28 +726,28 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
             ))}
           </select>
           <button onClick={bulkMove} disabled={!moveTopic} className="px-3 py-1 bg-stone-700 disabled:opacity-50 text-white rounded text-xs">Перенести</button>
-          <button onClick={() => setSel(new Set())} className="text-stone-500 text-xs ml-auto">Скинути</button>
+          <button onClick={() => setSel(new Set())} className="text-stone-500 dark:text-stone-400 text-xs ml-auto">Скинути</button>
         </div>
       )}
 
       {/* Desktop: таблиця */}
       <Card className="overflow-hidden hidden md:block">
         <table className="w-full">
-          <thead className="bg-stone-50 border-b border-stone-200">
+          <thead className="bg-stone-50 dark:bg-stone-900 border-b border-stone-200 dark:border-stone-700">
             <tr>
               <th className="w-10 px-4 py-3"></th>
-              <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Стаття</th>
-              <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Роль</th>
-              <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Локації</th>
-              <th className="text-left text-xs uppercase tracking-wider text-stone-500 px-4 py-3">Автор</th>
+              <th className="text-left text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 px-4 py-3">Стаття</th>
+              <th className="text-left text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 px-4 py-3">Роль</th>
+              <th className="text-left text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 px-4 py-3">Локації</th>
+              <th className="text-left text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 px-4 py-3">Автор</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((a) => (
-              <tr key={a.id} className="border-b border-stone-100 last:border-0 hover:bg-stone-50/50">
+              <tr key={a.id} className="border-b border-stone-100 dark:border-stone-800 last:border-0 hover:bg-stone-50/50">
                 <td className="px-4 py-3"><input type="checkbox" checked={sel.has(a.id)} onChange={() => toggle(a.id)} /></td>
                 <td className="px-4 py-3" style={{ fontFamily: 'system-ui, sans-serif' }}>
-                  <div className="text-sm text-stone-800">{a.title}</div>
+                  <div className="text-sm text-stone-800 dark:text-stone-100">{a.title}</div>
                   <div className="text-xs text-stone-400">{new Date(a.createdAt).toLocaleDateString('uk-UA')}</div>
                 </td>
                 <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full border" style={roleChipStyle(topicRole(a))}>{roleName(topicRole(a))}</span></td>
@@ -741,7 +757,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
                       a.locations.map((l) => <span key={l.locationId} className="text-xs px-1.5 py-0.5 rounded text-white" style={{ background: l.color || '#a8a29e' }}>{l.name}</span>)}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-stone-600" style={{ fontFamily: 'system-ui, sans-serif' }}>{a.authorName || '—'}</td>
+                <td className="px-4 py-3 text-sm text-stone-600 dark:text-stone-300" style={{ fontFamily: 'system-ui, sans-serif' }}>{a.authorName || '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -756,7 +772,7 @@ function ContentTab({ articles, topicsMap, allLocations, reloadArticles }) {
             <div className="flex items-start gap-3">
               <input type="checkbox" className="mt-1 w-4 h-4" checked={sel.has(a.id)} onChange={() => toggle(a.id)} />
               <div className="flex-1 min-w-0" style={{ fontFamily: 'system-ui, sans-serif' }}>
-                <div className="text-sm text-stone-800">{a.title}</div>
+                <div className="text-sm text-stone-800 dark:text-stone-100">{a.title}</div>
                 <div className="text-xs text-stone-400 mb-2">{new Date(a.createdAt).toLocaleDateString('uk-UA')} · {a.authorName || '—'}</div>
                 <div className="flex flex-wrap gap-1 items-center">
                   <span className="text-xs px-2 py-0.5 rounded-full border" style={roleChipStyle(topicRole(a))}>{roleName(topicRole(a))}</span>
@@ -809,38 +825,38 @@ function PublishModal({ topicsMap, allLocations, onClose, onCreated }) {
 
   return (
     <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch md:items-center justify-center md:p-4">
-      <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
-        <div className="p-4 md:p-6 border-b border-stone-200 flex items-center justify-between sticky top-0 bg-white z-10">
-          <h2 className="text-lg md:text-xl text-stone-800">Опублікувати статтю</h2>
+      <div className="bg-white dark:bg-stone-900 w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
+        <div className="p-4 md:p-6 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between sticky top-0 bg-white dark:bg-stone-900 z-10">
+          <h2 className="text-lg md:text-xl text-stone-800 dark:text-stone-100">Опублікувати статтю</h2>
           <button onClick={onClose} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1" style={{ fontFamily: 'system-ui, sans-serif' }}>
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Роль</label>
-              <select value={role} onChange={(e) => { setRole(e.target.value); setTopicId(''); }} className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm">
+              <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Роль</label>
+              <select value={role} onChange={(e) => { setRole(e.target.value); setTopicId(''); }} className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
                 {roleKeys.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Розділ</label>
-              <select value={topicId} onChange={(e) => setTopicId(e.target.value)} className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm">
+              <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Розділ</label>
+              <select value={topicId} onChange={(e) => setTopicId(e.target.value)} className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm">
                 <option value="">— оберіть розділ —</option>
                 {topics.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
               </select>
             </div>
           </div>
-          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Заголовок" className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm" />
-          <textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={10} placeholder="Текст статті. **жирний** підтримується." className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm" />
-          <input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="Теги через кому" className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm" />
+          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Заголовок" className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
+          <textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={10} placeholder="Текст статті. **жирний** підтримується." className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
+          <input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="Теги через кому" className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
           <div>
-            <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">Локації <span className="normal-case text-stone-400">(порожньо = усі)</span></label>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Локації <span className="normal-case text-stone-400">(порожньо = усі)</span></label>
             <div className="flex flex-wrap gap-2">
               {allLocations.map((l) => {
                 const on = locationIds.includes(l.id);
                 return (
                   <button key={l.id} type="button" onClick={() => toggleLoc(l.id)}
-                    className={`px-3 py-1 rounded-full text-sm border transition ${on ? 'text-white border-transparent' : 'text-stone-600 border-stone-300 bg-white'}`}
+                    className={`px-3 py-1 rounded-full text-sm border transition ${on ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300 bg-white dark:bg-stone-900'}`}
                     style={on ? { background: l.color || '#a8a29e' } : undefined}>{l.name}</button>
                 );
               })}
@@ -848,8 +864,8 @@ function PublishModal({ topicsMap, allLocations, onClose, onCreated }) {
           </div>
           {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
         </div>
-        <div className="p-4 md:p-6 border-t border-stone-200 flex gap-2 justify-end sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 text-stone-700 rounded-md text-sm">Скасувати</button>
+        <div className="p-4 md:p-6 border-t border-stone-200 dark:border-stone-700 flex gap-2 justify-end sticky bottom-0 bg-white dark:bg-stone-900">
+          <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Скасувати</button>
           <button onClick={save} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">{busy ? 'Збереження…' : 'Опублікувати'}</button>
         </div>
       </div>
@@ -866,7 +882,7 @@ function IconPicker({ value, onChange }) {
         const on = value === name;
         return (
           <button key={name} type="button" onClick={() => onChange(on ? null : name)} title={name}
-            className={`aspect-square flex items-center justify-center rounded-md border transition ${on ? 'bg-rose-50 border-rose-400 text-rose-600' : 'border-stone-200 text-stone-500 hover:border-rose-300'}`}>
+            className={`aspect-square flex items-center justify-center rounded-md border transition ${on ? 'bg-rose-50 border-rose-400 text-rose-600' : 'border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-rose-300'}`}>
             <Ico className="w-4 h-4" />
           </button>
         );
@@ -876,6 +892,7 @@ function IconPicker({ value, onChange }) {
 }
 
 function TopicsTab({ topicsMap, reloadTopics }) {
+  const confirm = useConfirm();
   const { roleName, roleKeys } = useRoles();
   const [selectedRole, setSelectedRole] = useState('florist');
   const [draft, setDraft] = useState({ title: '', description: '', icon: null });
@@ -903,7 +920,7 @@ function TopicsTab({ topicsMap, reloadTopics }) {
     await reloadTopics();
   };
   const del = async (id) => {
-    if (!window.confirm('Видалити розділ?')) return;
+    if (!(await confirm({ title: 'Видалити розділ?', description: 'Розділ буде видалено.' }))) return;
     await apiDelete(`/api/topics/${id}`);
     await reloadTopics();
   };
@@ -912,9 +929,9 @@ function TopicsTab({ topicsMap, reloadTopics }) {
     <div className="space-y-6">
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg text-stone-800">Розділи знань</h3>
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">Розділи знань</h3>
           <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}
-            className="px-3 py-2 border border-stone-200 rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }}>
+            className="px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }}>
             {roleKeys.map((k) => <option key={k} value={k}>{roleName(k)}</option>)}
           </select>
         </div>
@@ -924,21 +941,21 @@ function TopicsTab({ topicsMap, reloadTopics }) {
             const Ico = iconFor(t.icon);
             return editId === t.id ? (
               <div key={t.id} className="p-3 border border-rose-200 rounded bg-rose-50/40 space-y-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
-                <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="w-full px-3 py-2 border border-stone-200 rounded text-sm" placeholder="Назва" />
-                <input value={editDraft.description} onChange={(e) => setEditDraft({ ...editDraft, description: e.target.value })} className="w-full px-3 py-2 border border-stone-200 rounded text-sm" placeholder="Опис" />
+                <input value={editDraft.title} onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })} className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded text-sm" placeholder="Назва" />
+                <input value={editDraft.description} onChange={(e) => setEditDraft({ ...editDraft, description: e.target.value })} className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded text-sm" placeholder="Опис" />
                 <IconPicker value={editDraft.icon} onChange={(ic) => setEditDraft({ ...editDraft, icon: ic })} />
                 <div className="flex gap-2">
                   <button onClick={saveEdit} className="px-3 py-1.5 bg-emerald-500 text-white rounded text-sm">Зберегти</button>
-                  <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-stone-100 text-stone-700 rounded text-sm">Скасувати</button>
+                  <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded text-sm">Скасувати</button>
                 </div>
               </div>
             ) : (
-              <div key={t.id} className="flex items-center justify-between p-3 bg-stone-50 rounded">
+              <div key={t.id} className="flex items-center justify-between p-3 bg-stone-50 dark:bg-stone-900 rounded">
                 <div className="flex items-center gap-3">
-                  <Ico className="w-5 h-5 text-stone-500" />
+                  <Ico className="w-5 h-5 text-stone-500 dark:text-stone-400" />
                   <div>
-                    <div className="text-sm text-stone-800">{t.title}</div>
-                    <div className="text-xs text-stone-500 italic">{t.description}</div>
+                    <div className="text-sm text-stone-800 dark:text-stone-100">{t.title}</div>
+                    <div className="text-xs text-stone-500 dark:text-stone-400 italic">{t.description}</div>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -951,12 +968,12 @@ function TopicsTab({ topicsMap, reloadTopics }) {
           {list.length === 0 && <p className="text-sm text-stone-400 italic">Для цієї ролі ще немає розділів.</p>}
         </div>
 
-        <div className="mt-5 pt-5 border-t border-stone-100 space-y-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
-          <p className="text-xs uppercase tracking-wider text-stone-500">Новий розділ</p>
-          <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Назва розділу" className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm" />
-          <input value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Опис" className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm" />
+        <div className="mt-5 pt-5 border-t border-stone-100 dark:border-stone-800 space-y-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          <p className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400">Новий розділ</p>
+          <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Назва розділу" className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
+          <input value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Опис" className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
           <div>
-            <p className="text-xs text-stone-500 mb-1.5">Іконка {draft.icon && <span className="text-rose-600">· {draft.icon}</span>}</p>
+            <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Іконка {draft.icon && <span className="text-rose-600">· {draft.icon}</span>}</p>
             <IconPicker value={draft.icon} onChange={(ic) => setDraft({ ...draft, icon: ic })} />
           </div>
           <button onClick={add} disabled={busy} className="px-4 py-2 bg-rose-500 disabled:opacity-60 text-white rounded text-sm"><Plus className="w-4 h-4 inline mr-1" />Додати розділ</button>
@@ -969,6 +986,7 @@ function TopicsTab({ topicsMap, reloadTopics }) {
 // ============ МОДЕРАЦІЯ ============
 // ============ РОЛІ ============
 function RolesTab() {
+  const confirm = useConfirm();
   const { roles, reload } = useRoles();
   const [editing, setEditing] = useState(null); // role obj or {__new:true}
   const [form, setForm] = useState({ name: '', description: '', iconKey: null, color: '#e11d48', restricted: false });
@@ -997,7 +1015,7 @@ function RolesTab() {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   const del = async (r) => {
-    if (!window.confirm(`Видалити роль «${r.name}»?`)) return;
+    if (!(await confirm({ title: `Видалити роль «${r.name}»?`, description: 'Роль буде видалено (якщо немає призначень/розділів).' }))) return;
     try { await apiDelete(`/api/admin/roles/${r.key}`); await reload(); }
     catch (e) { alert(e.message); }
   };
@@ -1006,7 +1024,7 @@ function RolesTab() {
     <div className="space-y-4">
       <Card className="p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg text-stone-800">Ролі ({roles.length})</h3>
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">Ролі ({roles.length})</h3>
           <button onClick={openNew} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
             <Plus className="w-4 h-4" /> Створити роль
           </button>
@@ -1015,18 +1033,18 @@ function RolesTab() {
           {roles.map((r) => {
             const Ico = iconFor(r.iconKey, Shield);
             return (
-              <div key={r.key} className="flex items-center justify-between gap-3 p-3 border border-stone-200 rounded">
+              <div key={r.key} className="flex items-center justify-between gap-3 p-3 border border-stone-200 dark:border-stone-700 rounded">
                 <button onClick={() => openEdit(r)} className="flex items-center gap-3 text-left min-w-0">
                   <span className="w-9 h-9 rounded-full flex items-center justify-center border flex-shrink-0"
                     style={{ background: `${r.color || '#a8a29e'}1A`, color: r.color || '#78716c', borderColor: `${r.color || '#a8a29e'}55` }}>
                     <Ico className="w-4 h-4" />
                   </span>
                   <span className="min-w-0">
-                    <span className="text-sm text-stone-800 flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-stone-800 dark:text-stone-100 flex items-center gap-2 flex-wrap">
                       {r.name} <code className="text-xs text-stone-400">{r.key}</code>
                       {r.restricted && <span className="text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200">обмежена</span>}
                     </span>
-                    {r.description && <span className="block text-xs text-stone-500 truncate">{r.description}</span>}
+                    {r.description && <span className="block text-xs text-stone-500 dark:text-stone-400 truncate">{r.description}</span>}
                     <span className="block text-xs text-stone-400 mt-0.5">{r.userCount ?? 0} користувач(ів) · {r.topicCount ?? 0} розділ(ів)</span>
                   </span>
                 </button>
@@ -1041,32 +1059,32 @@ function RolesTab() {
 
       {editing && (
         <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
-          <div className="bg-white w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[90vh] rounded-none sm:rounded-lg flex flex-col overflow-hidden" style={{ fontFamily: 'system-ui, sans-serif' }}>
-            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-200 sticky top-0 bg-white">
-              <h3 className="text-lg text-stone-800" style={{ fontFamily: 'Georgia, serif' }}>{editing.__new ? 'Нова роль' : `Редагування: ${editing.name}`}</h3>
+          <div className="bg-white dark:bg-stone-900 w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[90vh] rounded-none sm:rounded-lg flex flex-col overflow-hidden" style={{ fontFamily: 'system-ui, sans-serif' }}>
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-200 dark:border-stone-700 sticky top-0 bg-white dark:bg-stone-900">
+              <h3 className="text-lg text-stone-800 dark:text-stone-100" style={{ fontFamily: 'Georgia, serif' }}>{editing.__new ? 'Нова роль' : `Редагування: ${editing.name}`}</h3>
               <button onClick={() => setEditing(null)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-4 sm:p-5 space-y-3 overflow-y-auto flex-1">
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва ролі" className="w-full px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" />
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Назва ролі" className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
               {editing.__new && form.name && (
                 <p className="text-xs text-stone-400">Ключ: <code>{form.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || '—'}</code></p>
               )}
-              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} placeholder="Опис" className="w-full px-3 py-2 border border-stone-200 rounded-md text-sm" />
-              <label className="flex items-center gap-3 text-sm text-stone-600">
-                Колір <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 w-16 border border-stone-200 rounded-md" />
+              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} placeholder="Опис" className="w-full px-3 py-2 border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
+              <label className="flex items-center gap-3 text-sm text-stone-600 dark:text-stone-300">
+                Колір <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} className="h-10 w-16 border border-stone-200 dark:border-stone-700 rounded-md" />
               </label>
-              <label className="flex items-center gap-2 text-sm text-stone-600 min-h-[44px]">
+              <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300 min-h-[44px]">
                 <input type="checkbox" className="w-4 h-4" checked={form.restricted} onChange={(e) => setForm({ ...form, restricted: e.target.checked })} />
                 Обмежений доступ (контент бачать лише призначені)
               </label>
               <div>
-                <p className="text-xs text-stone-500 mb-1.5">Іконка {form.iconKey && <span className="text-rose-600">· {form.iconKey}</span>}</p>
+                <p className="text-xs text-stone-500 dark:text-stone-400 mb-1.5">Іконка {form.iconKey && <span className="text-rose-600">· {form.iconKey}</span>}</p>
                 <IconPicker value={form.iconKey} onChange={(ic) => setForm({ ...form, iconKey: ic })} />
               </div>
               {error && <div className="p-2 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
             </div>
-            <div className="p-4 sm:p-5 border-t border-stone-200 flex gap-2 justify-end sticky bottom-0 bg-white">
-              <button onClick={() => setEditing(null)} className="px-4 min-h-[44px] bg-stone-100 text-stone-700 rounded-md text-sm">Скасувати</button>
+            <div className="p-4 sm:p-5 border-t border-stone-200 dark:border-stone-700 flex gap-2 justify-end sticky bottom-0 bg-white dark:bg-stone-900">
+              <button onClick={() => setEditing(null)} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Скасувати</button>
               <button onClick={save} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">{busy ? 'Збереження…' : 'Зберегти'}</button>
             </div>
           </div>
@@ -1077,6 +1095,7 @@ function RolesTab() {
 }
 
 function ModerationTab({ articles }) {
+  const confirm = useConfirm();
   const { roleName } = useRoles();
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1086,6 +1105,10 @@ function ModerationTab({ articles }) {
   }, []);
 
   const decide = async (id, status) => {
+    const ok = await confirm(status === 'approved'
+      ? { title: 'Прийняти пропозицію?', description: 'Пропозицію буде позначено як прийняту.', confirmLabel: 'Прийняти', confirmVariant: 'primary' }
+      : { title: 'Відхилити пропозицію?', description: 'Пропозицію буде відхилено.', confirmLabel: 'Відхилити' });
+    if (!ok) return;
     await apiPatch(`/api/suggestions/${id}`, { status });
     setPending((p) => p.filter((s) => s.id !== id));
   };
@@ -1094,23 +1117,23 @@ function ModerationTab({ articles }) {
 
   return (
     <Card className="p-6">
-      <h3 className="text-lg text-stone-800 mb-4">Пропозиції на модерацію ({pending.length})</h3>
+      <h3 className="text-lg text-stone-800 dark:text-stone-100 mb-4">Пропозиції на модерацію ({pending.length})</h3>
       {pending.length === 0 ? <p className="text-sm text-stone-400 italic">Усі пропозиції розглянуті</p> : (
         <div className="space-y-3">
           {pending.map((s) => {
             const article = articles.find((a) => a.id === s.articleId);
             return (
-              <div key={s.id} className="p-4 bg-stone-50 rounded border border-stone-200">
-                <div className="text-xs text-stone-500 mb-1">До статті: <span className="text-stone-700">{article?.title || '—'}</span></div>
-                <div className="text-sm text-stone-700 mb-2" style={{ fontFamily: 'system-ui, sans-serif' }}>{s.content}</div>
+              <div key={s.id} className="p-4 bg-stone-50 dark:bg-stone-900 rounded border border-stone-200 dark:border-stone-700">
+                <div className="text-xs text-stone-500 dark:text-stone-400 mb-1">До статті: <span className="text-stone-700 dark:text-stone-200">{article?.title || '—'}</span></div>
+                <div className="text-sm text-stone-700 dark:text-stone-200 mb-2" style={{ fontFamily: 'system-ui, sans-serif' }}>{s.content}</div>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-stone-500">{s.authorName} · {roleName(s.authorRole)}</span>
+                    <span className="text-xs text-stone-500 dark:text-stone-400">{s.authorName} · {roleName(s.authorRole)}</span>
                     <Stars avg={s.ratingAvg} count={s.ratingCount} />
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => decide(s.id, 'approved')} className="px-3 py-1 bg-emerald-500 text-white rounded text-xs">Прийняти</button>
-                    <button onClick={() => decide(s.id, 'rejected')} className="px-3 py-1 bg-stone-200 text-stone-700 rounded text-xs">Відхилити</button>
+                    <button onClick={() => decide(s.id, 'rejected')} className="px-3 py-1 bg-stone-200 text-stone-700 dark:text-stone-200 rounded text-xs">Відхилити</button>
                   </div>
                 </div>
               </div>
@@ -1138,10 +1161,10 @@ function AuditTab() {
   return (
     <Card className="p-5 md:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h3 className="text-lg text-stone-800">Журнал дій</h3>
+        <h3 className="text-lg text-stone-800 dark:text-stone-100">Журнал дій</h3>
         <div className="flex gap-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
           <input value={fAction} onChange={(e) => setFAction(e.target.value)} placeholder="Фільтр за дією (напр. user.)"
-            className="flex-1 sm:flex-none px-3 min-h-[44px] border border-stone-200 rounded-md text-sm" onKeyDown={(e) => e.key === 'Enter' && load(fAction)} />
+            className="flex-1 sm:flex-none px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm" onKeyDown={(e) => e.key === 'Enter' && load(fAction)} />
           <button onClick={() => load(fAction)} className="px-4 min-h-[44px] bg-stone-700 text-white rounded-md text-sm">Фільтр</button>
         </div>
       </div>
@@ -1150,8 +1173,8 @@ function AuditTab() {
       ) : (
         <div className="space-y-1.5">
           {logs.map((a) => (
-            <div key={a.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 text-sm border-b border-stone-100 last:border-0 py-2">
-              <span className="text-stone-700 break-words">
+            <div key={a.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 text-sm border-b border-stone-100 dark:border-stone-800 last:border-0 py-2">
+              <span className="text-stone-700 dark:text-stone-200 break-words">
                 <b className="text-stone-900">{a.actorName}</b> · <code className="text-xs text-rose-600">{a.action}</code> · {a.targetType}{a.targetId ? ` (${a.targetId.slice(0, 8)})` : ''}
               </span>
               <span className="text-xs text-stone-400 flex-shrink-0">{fmtDate(a.createdAt)}</span>

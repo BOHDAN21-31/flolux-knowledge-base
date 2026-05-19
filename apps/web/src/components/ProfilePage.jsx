@@ -4,6 +4,7 @@ import { apiPatch, apiPost, apiDelete, apiUpload, webauthnRegister, webauthnSupp
 import { userRoles } from '../roles';
 import { useRoles } from '../RolesContext';
 import { accountLevel } from '../level';
+import { useConfirm } from './ConfirmDialog';
 
 function Banner({ error, success }) {
   if (error) return <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded flex gap-2"><AlertCircle className="w-4 h-4 mt-0.5" />{error}</div>;
@@ -25,16 +26,16 @@ export default function ProfilePage({ user, allLocations, onRefresh, section = '
 
   return (
     <div>
-      <div className="mb-6 md:mb-8 pb-6 border-b border-stone-200">
+      <div className="mb-6 md:mb-8 pb-6 border-b border-stone-200 dark:border-stone-700">
         <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">Профіль</p>
-        <h1 className="text-2xl md:text-3xl text-stone-800">{user.name}{user.surname ? ` ${user.surname}` : ''}</h1>
+        <h1 className="text-2xl md:text-3xl text-stone-800 dark:text-stone-100">{user.name}{user.surname ? ` ${user.surname}` : ''}</h1>
       </div>
 
       {/* Mobile: таб-навігація (одна секція за раз) */}
-      <div className="md:hidden flex gap-1 mb-6 bg-stone-100 rounded-md p-1 overflow-x-auto scroll-touch">
+      <div className="md:hidden flex gap-1 mb-6 bg-stone-100 dark:bg-stone-800 rounded-md p-1 overflow-x-auto scroll-touch">
         {tabs.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-3 min-h-[44px] rounded text-sm whitespace-nowrap flex-shrink-0 transition ${tab === t.key ? 'bg-white shadow-sm text-stone-800' : 'text-stone-500'}`}>
+            className={`px-3 min-h-[44px] rounded text-sm whitespace-nowrap flex-shrink-0 transition ${tab === t.key ? 'bg-white dark:bg-stone-900 shadow-sm text-stone-800 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400'}`}>
             {t.label}
           </button>
         ))}
@@ -94,8 +95,8 @@ function PersonalSection({ user, allLocations, onRefresh }) {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="bg-white border border-stone-200 rounded-lg p-6 flex items-center gap-5">
-        <button onClick={() => fileRef.current?.click()} className="relative w-20 h-20 rounded-full overflow-hidden bg-stone-100 border border-stone-200 flex items-center justify-center group">
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6 flex items-center gap-5">
+        <button onClick={() => fileRef.current?.click()} className="relative w-20 h-20 rounded-full overflow-hidden bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center group">
           {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" /> : <User className="w-8 h-8 text-stone-400" />}
           <span className="absolute inset-0 bg-stone-900/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
             <Camera className="w-5 h-5 text-white" />
@@ -103,35 +104,35 @@ function PersonalSection({ user, allLocations, onRefresh }) {
         </button>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onAvatar} />
         <div>
-          <div className="text-lg text-stone-800">{user.name}{user.surname ? ` ${user.surname}` : ''}</div>
-          <div className="text-sm text-stone-500">{user.email}</div>
+          <div className="text-lg text-stone-800 dark:text-stone-100">{user.name}{user.surname ? ` ${user.surname}` : ''}</div>
+          <div className="text-sm text-stone-500 dark:text-stone-400">{user.email}</div>
           <div className="text-xs text-stone-400 mt-1">Натисніть на фото, щоб змінити аватар</div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-stone-200 rounded-lg p-4 text-center">
-          <div className="flex items-center justify-center gap-1 text-amber-500 mb-1"><Star className="w-4 h-4" /><span className="text-2xl text-stone-800">{user.rating ?? 0}</span></div>
-          <div className="text-xs text-stone-500">Рейтинг</div>
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 text-center">
+          <div className="flex items-center justify-center gap-1 text-amber-500 mb-1"><Star className="w-4 h-4" /><span className="text-2xl text-stone-800 dark:text-stone-100">{user.rating ?? 0}</span></div>
+          <div className="text-xs text-stone-500 dark:text-stone-400">Рейтинг</div>
         </div>
-        <div className="bg-white border border-stone-200 rounded-lg p-4 text-center">
-          <div className="text-sm text-stone-800 mt-1">{accountLevel(user.rating)}</div>
-          <div className="text-xs text-stone-500 mt-1">Рівень</div>
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 text-center">
+          <div className="text-sm text-stone-800 dark:text-stone-100 mt-1">{accountLevel(user.rating)}</div>
+          <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">Рівень</div>
         </div>
-        <div className="bg-white border border-stone-200 rounded-lg p-4 text-center">
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 text-center">
           <div className="text-sm mt-1">{user.approved
             ? <span className="text-emerald-700">Підтверджений</span>
             : <span className="text-amber-700">Очікує</span>}</div>
-          <div className="text-xs text-stone-500 mt-1">Статус акаунта</div>
+          <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">Статус акаунта</div>
         </div>
-        <div className="bg-white border border-stone-200 rounded-lg p-4 text-center">
-          <div className="text-sm text-stone-800 mt-1">{userRoles(user).length || '—'}</div>
-          <div className="text-xs text-stone-500 mt-1">Ролей призначено</div>
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-4 text-center">
+          <div className="text-sm text-stone-800 dark:text-stone-100 mt-1">{userRoles(user).length || '—'}</div>
+          <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">Ролей призначено</div>
         </div>
       </div>
 
-      <div className="bg-white border border-stone-200 rounded-lg p-6">
-        <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-3">Мої ролі</h3>
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+        <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-3">Мої ролі</h3>
         {userRoles(user).length === 0 ? (
           <p className="text-sm text-stone-400 italic">Ролі ще не призначені адміністратором</p>
         ) : (
@@ -145,14 +146,14 @@ function PersonalSection({ user, allLocations, onRefresh }) {
         )}
       </div>
 
-      <div className="bg-white border border-stone-200 rounded-lg p-6 space-y-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6 space-y-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
         <div className="grid sm:grid-cols-2 gap-4">
           <Labeled label="Ім'я"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="inp" /></Labeled>
           <Labeled label="Прізвище"><input value={form.surname} onChange={(e) => setForm({ ...form, surname: e.target.value })} className="inp" /></Labeled>
           <Labeled label="E-mail"><input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="inp" /></Labeled>
           <Labeled label="Телефон"><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="inp" /></Labeled>
-          <Labeled label="Бажана роль (read-only)"><input value={user.requestedRole ? roleName(user.requestedRole) : '—'} readOnly className="inp bg-stone-50 text-stone-500" /></Labeled>
-          <Labeled label="Ролі (read-only)"><input value={userRoles(user).map(roleName).join(', ') || '—'} readOnly className="inp bg-stone-50 text-stone-500" /></Labeled>
+          <Labeled label="Бажана роль (read-only)"><input value={user.requestedRole ? roleName(user.requestedRole) : '—'} readOnly className="inp bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400" /></Labeled>
+          <Labeled label="Ролі (read-only)"><input value={userRoles(user).map(roleName).join(', ') || '—'} readOnly className="inp bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400" /></Labeled>
         </div>
         <Banner error={error} success={success} />
         <button onClick={save} disabled={busy} className="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 disabled:opacity-60 text-white rounded-md text-sm">
@@ -160,8 +161,8 @@ function PersonalSection({ user, allLocations, onRefresh }) {
         </button>
       </div>
 
-      <div className="bg-white border border-stone-200 rounded-lg p-6">
-        <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-3">Зараз на моїх локаціях</h3>
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+        <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-3">Зараз на моїх локаціях</h3>
         {(user.locations || []).filter((l) => l.approved).length === 0 ? (
           <p className="text-sm text-stone-400 italic">Немає підтверджених локацій</p>
         ) : (
@@ -172,7 +173,7 @@ function PersonalSection({ user, allLocations, onRefresh }) {
                   <span className="w-3 h-3 rounded-full" style={{ background: l.color || '#a8a29e' }} />
                   {l.name}{l.isManager ? ' · керівник' : ''}
                 </span>
-                <span className="text-stone-500">{locCount(l.locationId)} людей</span>
+                <span className="text-stone-500 dark:text-stone-400">{locCount(l.locationId)} людей</span>
               </div>
             ))}
           </div>
@@ -187,7 +188,7 @@ function PersonalSection({ user, allLocations, onRefresh }) {
 function Labeled({ label, children }) {
   return (
     <div>
-      <label className="block text-xs uppercase tracking-wider text-stone-500 mb-1.5">{label}</label>
+      <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">{label}</label>
       {children}
     </div>
   );
@@ -232,8 +233,8 @@ function SecuritySection({ user, onRefresh }) {
 
   return (
     <div className="space-y-6 max-w-2xl" style={{ fontFamily: 'system-ui, sans-serif' }}>
-      <div className="bg-white border border-stone-200 rounded-lg p-6 space-y-3">
-        <h3 className="text-lg text-stone-800 flex items-center gap-2" style={{ fontFamily: 'Georgia, serif' }}><Lock className="w-4 h-4" /> Зміна паролю</h3>
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6 space-y-3">
+        <h3 className="text-lg text-stone-800 dark:text-stone-100 flex items-center gap-2" style={{ fontFamily: 'Georgia, serif' }}><Lock className="w-4 h-4" /> Зміна паролю</h3>
         <input type="password" placeholder="Поточний пароль" value={pw.currentPassword} onChange={(e) => setPw({ ...pw, currentPassword: e.target.value })} className="inp2" />
         <input type="password" placeholder="Новий пароль" value={pw.newPassword} onChange={(e) => setPw({ ...pw, newPassword: e.target.value })} className="inp2" />
         <input type="password" placeholder="Підтвердьте новий пароль" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} className="inp2" />
@@ -243,20 +244,20 @@ function SecuritySection({ user, onRefresh }) {
         </button>
       </div>
 
-      <div className="bg-white border border-stone-200 rounded-lg p-6">
-        <h3 className="text-lg text-stone-800 flex items-center gap-2 mb-4" style={{ fontFamily: 'Georgia, serif' }}><Fingerprint className="w-4 h-4" /> Touch / Face ID</h3>
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+        <h3 className="text-lg text-stone-800 dark:text-stone-100 flex items-center gap-2 mb-4" style={{ fontFamily: 'Georgia, serif' }}><Fingerprint className="w-4 h-4" /> Touch / Face ID</h3>
         <div className="space-y-2 mb-4">
           {(user.webauthn || []).length === 0 ? (
             <p className="text-sm text-stone-400 italic">Немає зареєстрованих пристроїв</p>
           ) : user.webauthn.map((w) => (
-            <div key={w.id} className="flex items-center justify-between p-3 bg-stone-50 rounded">
-              <span className="text-sm text-stone-700">{w.deviceName}</span>
+            <div key={w.id} className="flex items-center justify-between p-3 bg-stone-50 dark:bg-stone-900 rounded">
+              <span className="text-sm text-stone-700 dark:text-stone-200">{w.deviceName}</span>
               <button onClick={() => removeDevice(w.id)} className="text-rose-400 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
             </div>
           ))}
         </div>
         {bioSupported ? (
-          <button onClick={addDevice} className="flex items-center gap-2 px-4 py-2 border border-stone-300 hover:border-rose-400 rounded-md text-sm text-stone-700">
+          <button onClick={addDevice} className="flex items-center gap-2 px-4 py-2 border border-stone-300 hover:border-rose-400 rounded-md text-sm text-stone-700 dark:text-stone-200">
             <Plus className="w-4 h-4" /> Додати цей пристрій (Touch/Face ID)
           </button>
         ) : (
@@ -269,6 +270,7 @@ function SecuritySection({ user, onRefresh }) {
 }
 
 function LocationsSection({ user, allLocations, onRefresh }) {
+  const confirm = useConfirm();
   const [showModal, setShowModal] = useState(false);
   const [selected, setSelected] = useState([]);
   const [search, setSearch] = useState('');
@@ -308,7 +310,8 @@ function LocationsSection({ user, allLocations, onRefresh }) {
   };
 
   const detach = async (l) => {
-    if (!window.confirm(`Відкріпитись від локації «${l.name}»? Ви впевнені?`)) return;
+    const ok = await confirm({ title: 'Відкріпитись від локації?', description: `Локація «${l.name}». Цю прив'язку буде знято.`, confirmLabel: 'Відкріпитись' });
+    if (!ok) return;
     setError('');
     try {
       await apiDelete(`/api/users/me/locations/${l.locationId}`);
@@ -318,9 +321,9 @@ function LocationsSection({ user, allLocations, onRefresh }) {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="bg-white border border-stone-200 rounded-lg p-6">
+      <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg text-stone-800 flex items-center gap-2"><MapPin className="w-4 h-4" /> Підтверджені локації</h3>
+          <h3 className="text-lg text-stone-800 dark:text-stone-100 flex items-center gap-2"><MapPin className="w-4 h-4" /> Підтверджені локації</h3>
           <button onClick={() => setShowModal(true)} className="text-sm text-rose-500 hover:text-rose-600 flex items-center gap-1">
             <Plus className="w-4 h-4" /> Запросити локацію
           </button>
@@ -342,12 +345,12 @@ function LocationsSection({ user, allLocations, onRefresh }) {
       </div>
 
       {(user.locationRequests || []).length > 0 && (
-        <div className="bg-white border border-stone-200 rounded-lg p-6">
-          <h3 className="text-sm uppercase tracking-wider text-stone-500 mb-3">Запити в обробці</h3>
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+          <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-3">Запити в обробці</h3>
           <div className="space-y-2">
             {user.locationRequests.map((r) => (
               <div key={r.id} className="flex items-center justify-between text-sm">
-                <span className="text-stone-700">{r.locationName}</span>
+                <span className="text-stone-700 dark:text-stone-200">{r.locationName}</span>
                 <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded border border-amber-200">Очікує підтвердження</span>
               </div>
             ))}
@@ -357,9 +360,9 @@ function LocationsSection({ user, allLocations, onRefresh }) {
 
       {showModal && (
         <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
-          <div className="bg-white w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[85vh] rounded-none sm:rounded-lg flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-200 sticky top-0 bg-white">
-              <h3 className="text-lg text-stone-800">Запросити локацію</h3>
+          <div className="bg-white dark:bg-stone-900 w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[85vh] rounded-none sm:rounded-lg flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-200 dark:border-stone-700 sticky top-0 bg-white dark:bg-stone-900">
+              <h3 className="text-lg text-stone-800 dark:text-stone-100">Запросити локацію</h3>
               <button onClick={() => setShowModal(false)} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
             </div>
 
@@ -369,11 +372,11 @@ function LocationsSection({ user, allLocations, onRefresh }) {
               ) : (
                 <>
                   <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Пошук локації…"
-                    className="w-full px-3 min-h-[44px] mb-3 border border-stone-200 rounded-md text-sm" />
+                    className="w-full px-3 min-h-[44px] mb-3 border border-stone-200 dark:border-stone-700 rounded-md text-sm" />
                   <div className="flex flex-wrap gap-1.5 mb-4">
                     {['all', ...cities].map((c) => (
                       <button key={c} onClick={() => setCityFilter(c)}
-                        className={`px-3 py-1.5 rounded-full text-xs border transition ${cityFilter === c ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 border-stone-300'}`}>
+                        className={`px-3 py-1.5 rounded-full text-xs border transition ${cityFilter === c ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}>
                         {c === 'all' ? 'Всі' : c}
                       </button>
                     ))}
@@ -385,10 +388,10 @@ function LocationsSection({ user, allLocations, onRefresh }) {
                       <div className="text-xs uppercase tracking-wider text-stone-400 mb-2">{city}</div>
                       <div className="space-y-1.5">
                         {locs.map((l) => (
-                          <label key={l.id} className="flex items-start gap-3 p-2.5 rounded-md border border-stone-200 hover:border-rose-300 cursor-pointer">
+                          <label key={l.id} className="flex items-start gap-3 p-2.5 rounded-md border border-stone-200 dark:border-stone-700 hover:border-rose-300 cursor-pointer">
                             <input type="checkbox" className="mt-0.5 w-4 h-4" checked={selected.includes(l.id)} onChange={() => toggle(l.id)} />
                             <span className="flex-1">
-                              <span className="flex items-center gap-2 text-sm text-stone-800">
+                              <span className="flex items-center gap-2 text-sm text-stone-800 dark:text-stone-100">
                                 <span className="w-2.5 h-2.5 rounded-full" style={{ background: l.color || '#a8a29e' }} />{l.name}
                               </span>
                               {l.address && <span className="block text-xs text-stone-400 mt-0.5">{l.address}</span>}
@@ -403,7 +406,7 @@ function LocationsSection({ user, allLocations, onRefresh }) {
             </div>
 
             {available.length > 0 && (
-              <div className="p-4 sm:p-5 border-t border-stone-200 sticky bottom-0 bg-white">
+              <div className="p-4 sm:p-5 border-t border-stone-200 dark:border-stone-700 sticky bottom-0 bg-white dark:bg-stone-900">
                 {error && <div className="p-2 mb-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
                 <button onClick={sendRequests} disabled={busy || selected.length === 0}
                   className="w-full px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
