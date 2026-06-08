@@ -50,6 +50,8 @@ model User {
   courses               Course[]                @relation("courseAuthor")
   enrollments           Enrollment[]            @relation("enrollmentUser")
   enrolledByMe          Enrollment[]            @relation("enrollmentEnroller")
+  quizzes               Quiz[]                  @relation("quizAuthor")
+  quizAttempts          QuizAttempt[]
 }
 
 model Announcement {
@@ -170,6 +172,7 @@ model Course {
   targetRoles      String[]     @default([])
   isOnboarding     Boolean      @default(false)
   finalQuizId      String?
+  finalQuiz        Quiz?        @relation("courseFinalQuiz", fields: [finalQuizId], references: [id], onDelete: SetNull)
   dueDays          Int?
   publishedAt      DateTime?
   authorId         String?
@@ -178,6 +181,7 @@ model Course {
   updatedAt        DateTime     @updatedAt
   lessons          Lesson[]
   enrollments      Enrollment[]
+  quizzes          Quiz[]       @relation("quizCourse")
 
   @@index([category])
   @@index([isOnboarding])
@@ -197,24 +201,26 @@ model Lesson {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   progress         LessonProgress[]
+  quizzes          Quiz[]           @relation("quizLesson")
 
   @@index([courseId, orderIdx])
 }
 
 model Enrollment {
-  id          String           @id @default(cuid())
-  userId      String
-  user        User             @relation("enrollmentUser", fields: [userId], references: [id], onDelete: Cascade)
-  courseId    String
-  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  enrolledBy  String?
-  enroller    User?            @relation("enrollmentEnroller", fields: [enrolledBy], references: [id], onDelete: SetNull)
-  enrolledAt  DateTime         @default(now())
-  startedAt   DateTime?
-  completedAt DateTime?
-  dueAt       DateTime?
-  status      String           @default("assigned")
-  progress    LessonProgress[]
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation("enrollmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  courseId     String
+  course       Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrolledBy   String?
+  enroller     User?            @relation("enrollmentEnroller", fields: [enrolledBy], references: [id], onDelete: SetNull)
+  enrolledAt   DateTime         @default(now())
+  startedAt    DateTime?
+  completedAt  DateTime?
+  dueAt        DateTime?
+  status       String           @default("assigned")
+  progress     LessonProgress[]
+  quizAttempts QuizAttempt[]
 
   @@unique([userId, courseId])
   @@index([userId])
@@ -231,6 +237,67 @@ model LessonProgress {
   secondsSpent Int        @default(0)
 
   @@unique([enrollmentId, lessonId])
+  @@index([enrollmentId])
+}
+
+model Quiz {
+  id                 String        @id @default(cuid())
+  title              String
+  description        String?
+  courseId           String?
+  course             Course?       @relation("quizCourse", fields: [courseId], references: [id], onDelete: Cascade)
+  lessonId           String?
+  lesson             Lesson?       @relation("quizLesson", fields: [lessonId], references: [id], onDelete: Cascade)
+  passingScore       Int           @default(80)
+  maxAttempts        Int           @default(3)
+  timeLimit          Int?
+  shuffleQuestions   Boolean       @default(true)
+  showCorrectAnswers Boolean       @default(true)
+  createdBy          String?
+  createdByUser      User?         @relation("quizAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  questions          Question[]
+  attempts           QuizAttempt[]
+  // Inverse — курси, для яких цей quiz є finalQuizId.
+  finalForCourses    Course[]      @relation("courseFinalQuiz")
+
+  @@index([courseId])
+  @@index([lessonId])
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  quizId        String
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  type          String
+  text          String
+  explanation   String?
+  options       Json?
+  correctAnswer String?
+  points        Int      @default(1)
+  orderIdx      Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@index([quizId, orderIdx])
+}
+
+model QuizAttempt {
+  id            String      @id @default(cuid())
+  quizId        String
+  quiz          Quiz        @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollmentId  String?
+  enrollment    Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  startedAt     DateTime    @default(now())
+  submittedAt   DateTime?
+  score         Int?
+  passed        Boolean?
+  answers       Json?
+  attemptNumber Int
+
+  @@index([userId, quizId])
   @@index([enrollmentId])
 }
 

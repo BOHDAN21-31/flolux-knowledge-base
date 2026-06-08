@@ -12,6 +12,7 @@ import NotificationsPage from './components/NotificationsPage';
 import AnnouncementsPage, { AnnouncementCard } from './components/AnnouncementsPage';
 import DocsPage, { DocViewPage, DocEditorPage, NewDocPage } from './components/DocsPage';
 import CoursesPage, { CourseViewPage, LessonPlayerPage, CourseEditorPage, NewCoursePage, CertificatePage } from './components/CoursesPage';
+import { QuizPlayerPage, AttemptResultPage, QuizEditorPage } from './components/QuizPages';
 import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
 import Stars from './Stars';
 import { userRoles, isAdminUser, isSeniorUser } from './roles';
@@ -46,6 +47,9 @@ function pathForFrame(f) {
     case 'editCourse': return `/courses/${f.slug}/edit`;
     case 'newCourse': return '/courses/new';
     case 'certificate': return `/enrollments/${f.enrollmentId}/certificate`;
+    case 'takeQuiz': return `/quizzes/${f.quizId}/take`;
+    case 'attemptResult': return `/attempts/${f.attemptId}`;
+    case 'editQuiz': return `/quizzes/${f.quizId}/edit`;
     default: return '/';
   }
 }
@@ -80,6 +84,9 @@ function frameFromPath(pathname) {
   if ((m = p.match(/^\/courses\/([^/]+)\/lessons\/([^/]+)$/))) return { type: 'lesson', slug: m[1], lessonId: m[2] };
   if ((m = p.match(/^\/courses\/([^/]+)$/))) return { type: 'course', slug: m[1] };
   if ((m = p.match(/^\/enrollments\/([^/]+)\/certificate$/))) return { type: 'certificate', enrollmentId: m[1] };
+  if ((m = p.match(/^\/quizzes\/([^/]+)\/take$/))) return { type: 'takeQuiz', quizId: m[1] };
+  if ((m = p.match(/^\/quizzes\/([^/]+)\/edit$/))) return { type: 'editQuiz', quizId: m[1] };
+  if ((m = p.match(/^\/attempts\/([^/]+)$/))) return { type: 'attemptResult', attemptId: m[1] };
   return { type: 'home' };
 }
 const TOP_LEVEL = ['home', 'tech', 'admin', 'profile', 'notifications', 'docs', 'courses'];
@@ -253,7 +260,7 @@ function AppInner() {
   const navView = ['home', 'tech', 'admin', 'profile', 'docs', 'courses'].includes(current.type)
     ? current.type
     : (['doc', 'editDoc', 'newDoc'].includes(current.type) ? 'docs'
-      : (['course', 'editCourse', 'newCourse', 'lesson', 'certificate'].includes(current.type) ? 'courses' : null));
+      : (['course', 'editCourse', 'newCourse', 'lesson', 'certificate', 'takeQuiz', 'attemptResult', 'editQuiz'].includes(current.type) ? 'courses' : null));
 
   let screen = null;
   if (current.type === 'home') {
@@ -353,6 +360,7 @@ function AppInner() {
         onBack={back}
         onOpenLesson={(l) => push({ type: 'lesson', slug: current.slug, lessonId: l.id })}
         onEdit={() => push({ type: 'editCourse', slug: current.slug })}
+        onOpenQuiz={(qid) => push({ type: 'takeQuiz', quizId: qid })}
         canManage={canAdminArea}
       />
     );
@@ -364,6 +372,7 @@ function AppInner() {
         onBack={back}
         onOpenLesson={(id) => reset({ type: 'lesson', slug: current.slug, lessonId: id })}
         onOpenCertificate={(eid) => push({ type: 'certificate', enrollmentId: eid })}
+        onOpenQuiz={(qid) => push({ type: 'takeQuiz', quizId: qid })}
       />
     );
   } else if (current.type === 'editCourse' && canAdminArea) {
@@ -373,6 +382,7 @@ function AppInner() {
         onBack={back}
         allLocations={allLocations}
         isAdmin={isAdmin}
+        onOpenQuiz={(qid) => push({ type: 'editQuiz', quizId: qid })}
       />
     );
   } else if (current.type === 'newCourse' && canAdminArea) {
@@ -384,6 +394,27 @@ function AppInner() {
     );
   } else if (current.type === 'certificate') {
     screen = <CertificatePage enrollmentId={current.enrollmentId} onBack={back} />;
+  } else if (current.type === 'takeQuiz') {
+    screen = (
+      <QuizPlayerPage
+        quizId={current.quizId}
+        onBack={back}
+        onFinish={(attemptId) => reset(stack.length > 1
+          ? [...stack.slice(0, -1), { type: 'attemptResult', attemptId }]
+          : [{ type: 'home' }, { type: 'attemptResult', attemptId }])}
+      />
+    );
+  } else if (current.type === 'attemptResult') {
+    screen = (
+      <AttemptResultPage
+        attemptId={current.attemptId}
+        onBack={back}
+        onRetry={() => { /* поки що просто back, користувач повторно натисне Старт */ back(); }}
+        onBackToCourse={() => back()}
+      />
+    );
+  } else if (current.type === 'editQuiz' && canAdminArea) {
+    screen = <QuizEditorPage quizId={current.quizId} onBack={back} />;
   } else if (current.type === 'tech') {
     screen = (
       <TechView
@@ -409,6 +440,7 @@ function AppInner() {
         onOpenCourses={() => push({ type: 'courses' })}
         onCreateCourse={() => push({ type: 'newCourse' })}
         onOpenCourse={(slug) => push({ type: 'editCourse', slug })}
+        onOpenQuiz={(qid) => push({ type: 'editQuiz', quizId: qid })}
       />
     );
   } else if (current.type === 'topic') {

@@ -36,7 +36,7 @@ function buildNav(isAdmin) {
   return nav;
 }
 
-export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, isAdmin = true, tab: tabProp, onTab, onOpenUser, onCreateDigest, onOpenCourses, onCreateCourse, onOpenCourse }) {
+export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, isAdmin = true, tab: tabProp, onTab, onOpenUser, onCreateDigest, onOpenCourses, onCreateCourse, onOpenCourse, onOpenQuiz }) {
   const NAV = buildNav(isAdmin);
   // Захист: HR не може потрапити на admin-only вкладку через URL — fallback на дозволену.
   const allowed = NAV.map((n) => n.key);
@@ -98,7 +98,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
           {tab === 'digests' && <DigestsTab onCreateDigest={onCreateDigest} />}
           {tab === 'announcements' && <AnnouncementsTab allLocations={allLocations} />}
           {tab === 'docsReport' && <DocsReportTab onOpenUser={onOpenUser} />}
-          {tab === 'lms' && <LmsTab onOpenCourses={onOpenCourses} onCreateCourse={onCreateCourse} onOpenCourse={onOpenCourse} />}
+          {tab === 'lms' && <LmsTab onOpenCourses={onOpenCourses} onCreateCourse={onCreateCourse} onOpenCourse={onOpenCourse} onOpenQuiz={onOpenQuiz} />}
         </div>
       </div>
     </div>
@@ -2268,7 +2268,7 @@ function DocReportRow({ doc, isOpen, onToggle, onOpenUser }) {
 }
 
 // ============ 🎓 LMS: НАВЧАННЯ (admin/HR) ============
-function LmsTab({ onOpenCourses, onCreateCourse, onOpenCourse }) {
+function LmsTab({ onOpenCourses, onCreateCourse, onOpenCourse, onOpenQuiz }) {
   const [courses, setCourses] = useState([]);
   const [error, setError] = useState('');
 
@@ -2319,6 +2319,117 @@ function LmsTab({ onOpenCourses, onCreateCourse, onOpenCourse }) {
           </div>
         )}
       </Card>
+
+      <QuizzesStatsBlock courses={courses} onOpenQuiz={onOpenQuiz} />
+    </div>
+  );
+}
+
+function QuizzesStatsBlock({ courses, onOpenQuiz }) {
+  const [quizzes, setQuizzes] = useState([]);
+  const [openId, setOpenId] = useState(null);
+
+  // Підвантажуємо quizes для кожного курсу через by-course
+  useEffect(() => {
+    if (!courses?.length) return;
+    Promise.all(courses.map((c) => apiGet(`/api/quizzes/by-course/${c.id}`).catch(() => [])))
+      .then((arrs) => {
+        const flat = [];
+        arrs.forEach((arr, i) => arr.forEach((q) => flat.push({ ...q, _courseTitle: courses[i].title })));
+        // плюс finalQuiz курсів (з API не приходить by-course бо finalQuizId не=courseId)
+        courses.forEach((c) => {
+          if (c.finalQuizId && !flat.find((q) => q.id === c.finalQuizId)) {
+            flat.push({ id: c.finalQuizId, title: `Фінальний тест: ${c.title}`, _courseTitle: c.title, _isFinal: true });
+          }
+        });
+        setQuizzes(flat);
+      });
+  }, [courses?.length]);
+
+  if (quizzes.length === 0) return null;
+  return (
+    <Card className="p-5 md:p-6">
+      <h3 className="text-lg text-stone-800 dark:text-stone-100 mb-4">🎯 Тести ({quizzes.length})</h3>
+      <div className="space-y-2">
+        {quizzes.map((q) => (
+          <QuizStatsRow key={q.id} quiz={q} isOpen={openId === q.id}
+            onToggle={() => setOpenId(openId === q.id ? null : q.id)}
+            onOpen={() => onOpenQuiz?.(q.id)} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function QuizStatsRow({ quiz, isOpen, onToggle, onOpen }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!isOpen || data) return;
+    apiGet(`/api/quizzes/${quiz.id}/attempts/all`).then(setData).catch(() => {});
+  }, [isOpen]);
+
+  return (
+    <div className="border border-stone-200 dark:border-stone-700 rounded">
+      <button onClick={onToggle} className="w-full p-3 flex items-center gap-3 text-left">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-stone-800 dark:text-stone-100 truncate">{quiz.title}</div>
+          <div className="text-xs text-stone-400 truncate">Курс: {quiz._courseTitle}{quiz._isFinal && ' · фінальний'}</div>
+        </div>
+        {data?.stats && (
+          <div className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-3 flex-shrink-0">
+            <span>{data.stats.submittedAttempts} спроб</span>
+            <span>{data.stats.passRate}% pass</span>
+            <span>сер. {data.stats.avgScore}%</span>
+          </div>
+        )}
+        <button onClick={(e) => { e.stopPropagation(); onOpen?.(); }}
+          className="text-xs px-2 py-1 rounded border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:text-rose-600">
+          Редагувати
+        </button>
+      </button>
+      {isOpen && (
+        <div className="border-t border-stone-200 dark:border-stone-700 p-3">
+          {!data ? <p className="text-xs text-stone-400 italic">Завантаження…</p>
+            : data.attempts.length === 0 ? <p className="text-xs text-stone-400 italic">Спроб ще немає</p>
+            : (
+              <div className="space-y-2">
+                {data.perQuestion.filter((p) => p.wrongPct >= 60).length > 0 && (
+                  <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                    ⚠️ Питань зі складністю &gt;60% помилок: {data.perQuestion.filter((p) => p.wrongPct >= 60).length}
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-stone-400 border-b border-stone-200 dark:border-stone-700">
+                        <th className="py-1 pr-2">Юзер</th>
+                        <th className="py-1 pr-2">#</th>
+                        <th className="py-1 pr-2">Score</th>
+                        <th className="py-1 pr-2">Результат</th>
+                        <th className="py-1">Дата</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.attempts.map((a) => (
+                        <tr key={a.id} className="border-b border-stone-100 dark:border-stone-800 last:border-0">
+                          <td className="py-1 pr-2 text-stone-700 dark:text-stone-200 truncate">{a.user.name}</td>
+                          <td className="py-1 pr-2 text-stone-400">{a.attemptNumber}</td>
+                          <td className="py-1 pr-2">{a.score ?? '—'}%</td>
+                          <td className="py-1 pr-2">
+                            {a.submittedAt
+                              ? (a.passed ? <span className="text-emerald-700">✓ pass</span> : <span className="text-rose-700">✕ fail</span>)
+                              : <span className="text-stone-400">…</span>}
+                          </td>
+                          <td className="py-1 text-stone-400">{a.submittedAt ? new Date(a.submittedAt).toLocaleDateString('uk-UA') : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+        </div>
+      )}
     </div>
   );
 }

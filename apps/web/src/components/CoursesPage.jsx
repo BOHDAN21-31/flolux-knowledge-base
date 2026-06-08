@@ -194,7 +194,7 @@ function CourseCard({ course, onOpen, canManage, onEdit, catalog }) {
 }
 
 // ============ ПЕРЕГЛЯД КУРСУ ============
-export function CourseViewPage({ slug, onBack, onOpenLesson, onEdit, canManage }) {
+export function CourseViewPage({ slug, onBack, onOpenLesson, onEdit, onOpenQuiz, onOpenAttempt, canManage }) {
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -328,10 +328,48 @@ export function CourseViewPage({ slug, onBack, onOpenLesson, onEdit, canManage }
             <p className="text-sm text-stone-400 italic py-4 text-center">Уроків ще немає</p>
           )}
 
+          {/* Фінальний тест — після завершення усіх уроків */}
+          {course.finalQuiz && enr && enr.completed >= enr.total && enr.total > 0 && !course.finalQuiz.passed && (
+            <div className="mt-6 p-5 bg-amber-50 border border-amber-300 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <Award className="w-5 h-5 text-amber-700" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-base text-amber-900 mb-1">🎯 Фінальний тест</div>
+                  <div className="text-sm text-amber-800 mb-2">
+                    Пройдіть тест на ≥{course.finalQuiz.passingScore}% для завершення курсу.
+                  </div>
+                  <div className="text-xs text-amber-700 mb-3">
+                    Питань: {course.finalQuiz.questionsCount} · Спроби: {course.finalQuiz.attemptsCount} з {course.finalQuiz.maxAttempts}
+                    {course.finalQuiz.bestScore != null && <> · Кращий результат: {course.finalQuiz.bestScore}%</>}
+                  </div>
+                  {course.finalQuiz.attemptsLeft > 0 ? (
+                    <button onClick={() => onOpenQuiz?.(course.finalQuiz.id)}
+                      className="px-4 min-h-[44px] bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                      {course.finalQuiz.attemptsCount > 0 ? 'Повторити тест' : 'Почати тест'}
+                    </button>
+                  ) : (
+                    <div className="text-xs text-rose-700">Вичерпано спроб. Зверніться до HR.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {course.finalQuiz?.passed && enr?.status !== 'completed' && (
+            <div className="mt-6 p-5 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
+              <div className="text-emerald-800">✓ Фінальний тест пройдено</div>
+            </div>
+          )}
+
           {enr?.status === 'completed' && (
             <div className="mt-6 p-5 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
               <div className="text-2xl mb-2">🎉</div>
               <div className="text-emerald-800 mb-3">Ви успішно завершили курс!</div>
+              {course.finalQuiz?.bestScore != null && (
+                <div className="text-sm text-emerald-700 mb-3">Результат фінального тесту: {course.finalQuiz.bestScore}%</div>
+              )}
               <a href={`/enrollments/${enr.id}/certificate`}
                 className="inline-flex items-center gap-2 px-4 min-h-[44px] bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }}>
                 <Download className="w-4 h-4" /> Завантажити сертифікат
@@ -345,7 +383,7 @@ export function CourseViewPage({ slug, onBack, onOpenLesson, onEdit, canManage }
 }
 
 // ============ ПЕРЕГЛЯД УРОКУ ============
-export function LessonPlayerPage({ slug, lessonId, onBack, onOpenLesson, onOpenCertificate }) {
+export function LessonPlayerPage({ slug, lessonId, onBack, onOpenLesson, onOpenCertificate, onOpenQuiz }) {
   const [lesson, setLesson] = useState(null);
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -451,6 +489,32 @@ export function LessonPlayerPage({ slug, lessonId, onBack, onOpenLesson, onOpenC
             </div>
           )}
 
+          {/* Тест уроку */}
+          {lesson.quiz && (
+            <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <Award className="w-4 h-4 text-amber-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-amber-900 mb-0.5">Перевірка знань</div>
+                  <div className="text-xs text-amber-700 mb-2">
+                    {lesson.quiz.title} · ≥{lesson.quiz.passingScore}% · {lesson.quiz.attemptsCount} з {lesson.quiz.maxAttempts} спроб
+                    {lesson.quiz.passed && <span className="ml-1 text-emerald-700">✓ пройдено</span>}
+                  </div>
+                  {lesson.quiz.attemptsLeft > 0 ? (
+                    <button onClick={() => onOpenQuiz?.(lesson.quiz.id)}
+                      className="px-3 min-h-[40px] bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm flex items-center gap-1" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                      <PlayCircle className="w-4 h-4" /> {lesson.quiz.passed ? 'Повторити тест' : 'Пройти тест'}
+                    </button>
+                  ) : (
+                    <div className="text-xs text-rose-700">Вичерпано спроб</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Action */}
           <div className="border-t border-stone-200 dark:border-stone-700 pt-5 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
             {!completed ? (
@@ -509,7 +573,7 @@ export function LessonPlayerPage({ slug, lessonId, onBack, onOpenLesson, onOpenC
 }
 
 // ============ РЕДАКТОР КУРСУ ============
-export function CourseEditorPage({ slug, onBack, allLocations = [], isAdmin }) {
+export function CourseEditorPage({ slug, onBack, allLocations = [], isAdmin, onOpenQuiz, onOpenLessonQuiz }) {
   const confirm = useConfirm();
   const { roleKeys, roleName } = useRoles();
   const [course, setCourse] = useState(null);
@@ -658,6 +722,7 @@ export function CourseEditorPage({ slug, onBack, allLocations = [], isAdmin }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <FinalQuizButton course={course} onOpenQuiz={onOpenQuiz} onCreated={() => apiGet(`/api/courses/${encodeURIComponent(slug)}`).then(setCourse)} />
           {course.isPublished ? (
             <button onClick={unpublish}
               className="px-3 min-h-[40px] rounded-md text-sm bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-200 flex items-center gap-1">
@@ -838,6 +903,7 @@ export function CourseEditorPage({ slug, onBack, allLocations = [], isAdmin }) {
                   </div>
                 )}
               </div>
+              <LessonQuizSection lesson={active} onOpenQuiz={onOpenQuiz} onChange={load} />
             </div>
           )}
         </div>
@@ -1079,10 +1145,15 @@ export function CertificatePage({ enrollmentId, onBack }) {
           <p className="text-stone-600 italic mb-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
             успішно завершив курс
           </p>
-          <h2 className="text-xl md:text-3xl mb-8 text-rose-700" style={{ fontFamily: 'Georgia, serif' }}>
+          <h2 className="text-xl md:text-3xl mb-4 text-rose-700" style={{ fontFamily: 'Georgia, serif' }}>
             «{data.courseName}»
           </h2>
-          <div className="flex justify-around text-stone-500 text-sm mt-12" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          {data.finalQuizScore != null && (
+            <p className="text-stone-700 italic mb-8" style={{ fontFamily: 'system-ui, sans-serif' }}>
+              Фінальний тест пройдено з результатом: <span className="text-rose-700">{data.finalQuizScore}%</span>
+            </p>
+          )}
+          <div className="flex justify-around text-stone-500 text-sm mt-8" style={{ fontFamily: 'system-ui, sans-serif' }}>
             <div>
               <div className="border-t border-stone-400 pt-1 px-4">
                 {new Date(data.completedAt).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -1108,6 +1179,88 @@ export function CertificatePage({ enrollmentId, onBack }) {
           main { padding: 0 !important; }
         }
       `}</style>
+    </div>
+  );
+}
+
+// Кнопка фінального тесту курсу. Якщо немає — створює.
+function FinalQuizButton({ course, onOpenQuiz, onCreated }) {
+  const [busy, setBusy] = useState(false);
+  if (!course) return null;
+  const has = !!course.finalQuizId;
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      const q = await apiPost('/api/quizzes', {
+        title: `Фінальний тест: ${course.title}`,
+        passingScore: 80,
+      });
+      await apiPatch(`/api/courses/${course.id}`, { finalQuizId: q.id });
+      onCreated?.();
+      onOpenQuiz?.(q.id);
+    } catch (e) {
+      alert(e.message);
+    } finally { setBusy(false); }
+  };
+
+  return has ? (
+    <button onClick={() => onOpenQuiz?.(course.finalQuizId)}
+      className="px-3 min-h-[40px] rounded-md text-sm border border-amber-300 text-amber-700 hover:bg-amber-50 flex items-center gap-1">
+      🎯 Фінальний тест
+    </button>
+  ) : (
+    <button onClick={create} disabled={busy}
+      className="px-3 min-h-[40px] rounded-md text-sm border border-amber-300 text-amber-700 hover:bg-amber-50 flex items-center gap-1">
+      + Фінальний тест
+    </button>
+  );
+}
+
+// Секція "Тест уроку" в редакторі уроку.
+function LessonQuizSection({ lesson, onOpenQuiz, onChange }) {
+  const [quiz, setQuiz] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    apiGet(`/api/quizzes/by-lesson/${lesson.id}`)
+      .then((q) => setQuiz(q || null))
+      .catch(() => setQuiz(null))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, [lesson.id]);
+
+  const create = async () => {
+    setBusy(true);
+    try {
+      const q = await apiPost('/api/quizzes', {
+        title: `Тест: ${lesson.title}`,
+        lessonId: lesson.id,
+        passingScore: 70,
+      });
+      onOpenQuiz?.(q.id);
+      load();
+      onChange?.();
+    } catch (e) { alert(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="border-t border-stone-200 dark:border-stone-700 pt-3">
+      <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Тест уроку</div>
+      {loading ? <p className="text-xs text-stone-400 italic">Завантаження…</p>
+        : quiz ? (
+          <button onClick={() => onOpenQuiz?.(quiz.id)}
+            className="px-3 min-h-[40px] rounded-md text-sm border border-amber-300 text-amber-700 hover:bg-amber-50 flex items-center gap-1">
+            🎯 Редагувати тест ({quiz.questionsCount ?? 0} пит.)
+          </button>
+        ) : (
+          <button onClick={create} disabled={busy}
+            className="px-3 min-h-[40px] rounded-md text-sm border border-stone-300 hover:border-rose-400 text-stone-700 dark:text-stone-200 flex items-center gap-1">
+            <Plus className="w-4 h-4" /> Додати тест до уроку
+          </button>
+        )}
     </div>
   );
 }

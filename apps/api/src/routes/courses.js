@@ -206,8 +206,47 @@ router.get('/:slug', requireAuth, wrap(async (req, res) => {
     ? { ...serializeEnrollment(enr), ...progressFor(enr, course.lessons) }
     : null;
 
+  // Final quiz (якщо є) + спроби юзера
+  let finalQuiz = null;
+  if (course.finalQuizId) {
+    const quiz = await prisma.quiz.findUnique({
+      where: { id: course.finalQuizId },
+      include: { questions: { select: { id: true } } },
+    });
+    if (quiz) {
+      const attempts = await prisma.quizAttempt.findMany({
+        where: { quizId: quiz.id, userId: req.user.id },
+        orderBy: { startedAt: 'desc' },
+      });
+      const submitted = attempts.filter((a) => a.submittedAt);
+      const passed = submitted.find((a) => a.passed) || null;
+      finalQuiz = {
+        id: quiz.id,
+        title: quiz.title,
+        passingScore: quiz.passingScore,
+        maxAttempts: quiz.maxAttempts,
+        questionsCount: quiz.questions.length,
+        attemptsCount: submitted.length,
+        attemptsLeft: Math.max(0, quiz.maxAttempts - submitted.length),
+        bestScore: submitted.length ? Math.max(...submitted.map((a) => a.score || 0)) : null,
+        passed: !!passed,
+        passedAttemptId: passed?.id || null,
+      };
+    }
+  }
+
+  // canComplete: усі уроки завершено + (finalQuiz відсутній АБО pass існує)
+  const allLessonsDone = enrollment && enrollment.total > 0 && enrollment.completed >= enrollment.total;
+  const canComplete = !!(allLessonsDone && (!finalQuiz || finalQuiz.passed));
+
   res.json({
-    ...serializeCourse(course, { lessonsCount: course.lessons.length, lessons, enrollment }),
+    ...serializeCourse(course, {
+      lessonsCount: course.lessons.length,
+      lessons,
+      enrollment,
+      finalQuiz,
+      canComplete,
+    }),
   });
 }));
 
@@ -242,8 +281,33 @@ router.get('/:slug/lessons/:lessonId', requireAuth, wrap(async (req, res) => {
     }
   }
 
+  // Lesson-quiz: якщо є — повертаємо метадані + перевірку pass юзером
+  const lessonQuiz = await prisma.quiz.findFirst({
+    where: { lessonId: lesson.id },
+    include: { questions: { select: { id: true } } },
+  });
+  let quizMeta = null;
+  if (lessonQuiz) {
+    const attempts = await prisma.quizAttempt.findMany({
+      where: { quizId: lessonQuiz.id, userId: req.user.id, submittedAt: { not: null } },
+      orderBy: { startedAt: 'desc' },
+    });
+    quizMeta = {
+      id: lessonQuiz.id,
+      title: lessonQuiz.title,
+      passingScore: lessonQuiz.passingScore,
+      maxAttempts: lessonQuiz.maxAttempts,
+      questionsCount: lessonQuiz.questions.length,
+      attemptsCount: attempts.length,
+      attemptsLeft: Math.max(0, lessonQuiz.maxAttempts - attempts.length),
+      bestScore: attempts.length ? Math.max(...attempts.map((a) => a.score || 0)) : null,
+      passed: attempts.some((a) => a.passed),
+    };
+  }
+
   res.json({
     ...serializeLesson(lesson),
+    quiz: quizMeta,
     courseSlug: course.slug,
     courseTitle: course.title,
     isFirst: lessonIdx === 0,
@@ -301,6 +365,7 @@ router.patch('/:id', requireAuth, requireManage, wrap(async (req, res) => {
     data.targetRoles = Array.isArray(req.body.targetRoles) ? req.body.targetRoles : [];
   }
   if (req.body?.isOnboarding !== undefined) data.isOnboarding = !!req.body.isOnboarding;
+  if (req.body?.finalQuizId !== undefined) data.finalQuizId = req.body.finalQuizId || null;
 
   const course = await prisma.course.update({
     where: { id: req.params.id }, data,
@@ -527,25 +592,46 @@ router.post('/lessons/:lessonId/complete', requireAuth, wrap(async (req, res) =>
     await prisma.enrollment.update({ where: { id: enr.id }, data: { status: 'in_progress' } });
   }
 
-  // Перевірка завершення курсу
+  // Перевірка завершення курсу.
+  // Якщо у курсу є finalQuiz — не завершуємо одразу: чекаємо проходження тесту.
   const totalLessons = lesson.course.lessons.length;
   const updatedProgress = await prisma.lessonProgress.count({
     where: { enrollmentId: enr.id, completedAt: { not: null } },
   });
   let isCourseComplete = false;
+  let needsFinalQuiz = false;
   if (updatedProgress >= totalLessons && totalLessons > 0) {
-    await prisma.enrollment.update({
-      where: { id: enr.id },
-      data: { completedAt: new Date(), status: 'completed' },
-    });
-    isCourseComplete = true;
-    notifyCourseCompleted(enr, lesson.course, req.user).catch(() => {});
+    if (lesson.course.finalQuizId) {
+      // Перевіримо, чи юзер уже пройшов finalQuiz
+      const passed = await prisma.quizAttempt.findFirst({
+        where: { quizId: lesson.course.finalQuizId, userId: req.user.id, passed: true, submittedAt: { not: null } },
+      });
+      if (passed) {
+        await prisma.enrollment.update({
+          where: { id: enr.id },
+          data: { completedAt: new Date(), status: 'completed' },
+        });
+        isCourseComplete = true;
+        notifyCourseCompleted(enr, lesson.course, req.user).catch(() => {});
+      } else {
+        needsFinalQuiz = true;
+      }
+    } else {
+      await prisma.enrollment.update({
+        where: { id: enr.id },
+        data: { completedAt: new Date(), status: 'completed' },
+      });
+      isCourseComplete = true;
+      notifyCourseCompleted(enr, lesson.course, req.user).catch(() => {});
+    }
   }
 
   res.json({
     ok: true,
     completedAt: ms(progress.completedAt),
     isCourseComplete,
+    needsFinalQuiz,
+    finalQuizId: needsFinalQuiz ? lesson.course.finalQuizId : null,
     enrollmentId: enr.id,
   });
 }));
@@ -566,6 +652,15 @@ router.get('/enrollments/:id/certificate', requireAuth, wrap(async (req, res) =>
   if (!enr.completedAt || enr.status !== 'completed') {
     return res.status(400).json({ error: 'Курс не завершено' });
   }
+  // Підтягуємо найкращий passed attempt фінального тесту (якщо був)
+  let finalQuizScore = null;
+  if (enr.course.finalQuizId) {
+    const best = await prisma.quizAttempt.findFirst({
+      where: { quizId: enr.course.finalQuizId, userId: enr.userId, passed: true, submittedAt: { not: null } },
+      orderBy: { score: 'desc' },
+    });
+    if (best) finalQuizScore = best.score;
+  }
   res.json({
     certificateId: enr.id,
     courseName: enr.course.title,
@@ -573,6 +668,7 @@ router.get('/enrollments/:id/certificate', requireAuth, wrap(async (req, res) =>
     userName: `${enr.user.name}${enr.user.surname ? ' ' + enr.user.surname : ''}`,
     enrolledAt: ms(enr.enrolledAt),
     completedAt: ms(enr.completedAt),
+    finalQuizScore,
   });
 }));
 
