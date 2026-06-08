@@ -88,3 +88,23 @@ export async function seedLocations() {
     console.log(`[seed] створено ${LOCATIONS.length} дефолтних локацій`);
   }
 }
+
+// Один порожній документ кожної категорії — стартова точка для адміна.
+// Чернетки (publishedAt=null), не видні юзерам. Idempotent — створюються тільки
+// за відсутності таких slug.
+const DEFAULT_DOCS = [
+  { slug: 'rules-of-conduct', title: 'Правила поведінки в компанії', category: 'conduct', iconKey: 'Shield', color: '#dc2626', description: 'Загальні правила та етика співробітників' },
+  { slug: 'work-schedule', title: 'Робочий графік', category: 'schedule', iconKey: 'Clock', color: '#3b82f6', description: 'Розпорядок дня, перерви, вихідні' },
+  { slug: 'how-to-reach-out', title: 'Алгоритм звернень', category: 'communication', iconKey: 'MessageCircle', color: '#10b981', description: 'До кого звертатись у різних ситуаціях' },
+  { slug: 'vacation-policy', title: 'Політика відпусток', category: 'policies', iconKey: 'FileCheck', color: '#8b5cf6', description: 'Порядок оформлення відпусток та відгулів' },
+];
+
+export async function seedCompanyDocs() {
+  for (const d of DEFAULT_DOCS) {
+    const exists = await prisma.companyDoc.findUnique({ where: { slug: d.slug } });
+    if (!exists) {
+      await prisma.companyDoc.create({ data: { ...d, publishedAt: null } });
+    }
+  }
+  console.log(`[seed] корпоративні документи синхронізовано (${DEFAULT_DOCS.length} шаблонів)`);
+}

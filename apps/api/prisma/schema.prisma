@@ -44,6 +44,9 @@ model User {
   permissions           UserPermission[]
   announcements         Announcement[]
   announcementReads     AnnouncementRead[]
+  docs                  CompanyDoc[]
+  docVersions           DocVersion[]
+  docAcknowledgements   DocAcknowledgement[]
 }
 
 model Announcement {
@@ -76,6 +79,77 @@ model AnnouncementRead {
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([announcementId, userId])
+  @@index([userId])
+}
+
+// Корпоративні документи (правила, SOP) — з версіями та підтвердженням прочитання.
+model CompanyDoc {
+  id                    String                @id @default(cuid())
+  slug                  String                @unique
+  title                 String
+  description           String?
+  category              String
+  iconKey               String?
+  color                 String?
+  currentVersion        Int                   @default(1)
+  publishedAt           DateTime?
+  mandatoryForRoles     String[]              @default([])
+  mandatoryForLocations String[]              @default([])
+  authorId              String?
+  author                User?                 @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  sections              DocSection[]
+  versions              DocVersion[]
+  acknowledgements      DocAcknowledgement[]
+
+  @@index([category])
+  @@index([publishedAt])
+}
+
+model DocSection {
+  id        String       @id @default(cuid())
+  docId     String
+  parentId  String?
+  title     String
+  body      String?
+  orderIdx  Int          @default(0)
+  level     Int          @default(1)
+  createdAt DateTime     @default(now())
+  doc       CompanyDoc   @relation(fields: [docId], references: [id], onDelete: Cascade)
+  parent    DocSection?  @relation("DocSectionTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  DocSection[] @relation("DocSectionTree")
+
+  @@index([docId, parentId, orderIdx])
+}
+
+model DocVersion {
+  id         String     @id @default(cuid())
+  docId      String
+  version    Int
+  snapshot   Json
+  changedBy  String?
+  changeNote String?
+  createdAt  DateTime   @default(now())
+  doc        CompanyDoc @relation(fields: [docId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [changedBy], references: [id], onDelete: SetNull)
+
+  @@unique([docId, version])
+  @@index([docId])
+}
+
+model DocAcknowledgement {
+  id                  String     @id @default(cuid())
+  docId               String
+  userId              String
+  versionAcknowledged Int
+  acknowledgedAt      DateTime   @default(now())
+  ipAddress           String?
+  doc                 CompanyDoc @relation(fields: [docId], references: [id], onDelete: Cascade)
+  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([docId, userId, versionAcknowledged])
+  @@index([docId])
   @@index([userId])
 }
 

@@ -20,6 +20,16 @@ export const ANNOUNCEMENT_CATEGORIES = [
 
 export const announcementCategory = (key) => ANNOUNCEMENT_CATEGORIES.find((c) => c.key === key) || null;
 
+// Категорії корпоративних документів — синхронізовано з apps/api/src/routes/company-docs.js
+export const DOC_CATEGORIES = [
+  { key: 'conduct', label: 'Правила поведінки', iconName: 'Shield', color: '#dc2626' },
+  { key: 'schedule', label: 'Робочий графік', iconName: 'Clock', color: '#3b82f6' },
+  { key: 'communication', label: 'Алгоритм звернень', iconName: 'MessageCircle', color: '#10b981' },
+  { key: 'policies', label: 'Політики', iconName: 'FileCheck', color: '#8b5cf6' },
+];
+
+export const docCategory = (key) => DOC_CATEGORIES.find((c) => c.key === key) || null;
+
 export const ANNOUNCEMENT_PRIORITIES = [
   { key: 'urgent', label: 'Терміновий', color: '#ef4444' },
   { key: 'high', label: 'Високий', color: '#f59e0b' },

@@ -10,6 +10,7 @@ import MarkdownEditor from './components/MarkdownEditor';
 import NotificationBell from './components/NotificationBell';
 import NotificationsPage from './components/NotificationsPage';
 import AnnouncementsPage, { AnnouncementCard } from './components/AnnouncementsPage';
+import DocsPage, { DocViewPage, DocEditorPage, NewDocPage } from './components/DocsPage';
 import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
 import Stars from './Stars';
 import { userRoles, isAdminUser, isSeniorUser } from './roles';
@@ -34,6 +35,10 @@ function pathForFrame(f) {
     case 'createArticle': return `/topics/${f.topicId}/new`;
     case 'createDigest': return '/digests/new';
     case 'announcements': return f.announcementId ? `/announcements/${f.announcementId}` : '/announcements';
+    case 'docs': return '/docs';
+    case 'doc': return `/docs/${f.slug}`;
+    case 'editDoc': return `/docs/${f.slug}/edit`;
+    case 'newDoc': return '/docs/new';
     default: return '/';
   }
 }
@@ -44,6 +49,8 @@ function frameFromPath(pathname) {
   if (p === '/profile') return { type: 'profile' };
   if (p === '/notifications') return { type: 'notifications' };
   if (p === '/digests/new') return { type: 'createDigest' };
+  if (p === '/docs') return { type: 'docs' };
+  if (p === '/docs/new') return { type: 'newDoc' };
   if (p === '/announcements') return { type: 'announcements' };
   {
     const m2 = p.match(/^\/announcements\/([^/]+)$/);
@@ -58,9 +65,11 @@ function frameFromPath(pathname) {
   if ((m = p.match(/^\/topics\/([^/]+)$/))) return { type: 'topic', topicId: m[1] };
   if ((m = p.match(/^\/articles\/([^/]+)\/edit$/))) return { type: 'editArticle', articleId: m[1] };
   if ((m = p.match(/^\/articles\/([^/]+)$/))) return { type: 'article', articleId: m[1] };
+  if ((m = p.match(/^\/docs\/([^/]+)\/edit$/))) return { type: 'editDoc', slug: m[1] };
+  if ((m = p.match(/^\/docs\/([^/]+)$/))) return { type: 'doc', slug: m[1] };
   return { type: 'home' };
 }
-const TOP_LEVEL = ['home', 'tech', 'admin', 'profile', 'notifications'];
+const TOP_LEVEL = ['home', 'tech', 'admin', 'profile', 'notifications', 'docs'];
 
 // ============ КОНСТАНТИ ============
 const REFERRAL_WORD = 'Flolux';
@@ -228,7 +237,9 @@ function AppInner() {
   const articleById = (id) => articles.find((a) => a.id === id) || null;
 
   // Тип фрейму -> підсвітка в навігації (home/tech/admin/profile або null)
-  const navView = ['home', 'tech', 'admin', 'profile'].includes(current.type) ? current.type : null;
+  const navView = ['home', 'tech', 'admin', 'profile', 'docs'].includes(current.type)
+    ? current.type
+    : (current.type === 'doc' || current.type === 'editDoc' || current.type === 'newDoc' ? 'docs' : null);
 
   let screen = null;
   if (current.type === 'home') {
@@ -245,6 +256,7 @@ function AppInner() {
         onOpenUser={(id) => push({ type: 'publicProfile', userId: id })}
         onGoProfile={() => reset({ type: 'profile' })}
         onOpenAnnouncements={() => push({ type: 'announcements' })}
+        onOpenDoc={(slug) => push({ type: 'doc', slug })}
       />
     );
   } else if (current.type === 'profile') {
@@ -272,6 +284,41 @@ function AppInner() {
     screen = <NotificationsPage onBack={back} onOpenPath={navigatePath} />;
   } else if (current.type === 'announcements') {
     screen = <AnnouncementsPage onBack={back} initialId={current.announcementId || null} />;
+  } else if (current.type === 'docs') {
+    screen = (
+      <DocsPage
+        onBack={back}
+        onOpenDoc={(d) => push({ type: 'doc', slug: d.slug })}
+        onEditDoc={(d) => push({ type: 'editDoc', slug: d.slug })}
+        onCreateDoc={() => push({ type: 'newDoc' })}
+        canManage={canAdminArea}
+      />
+    );
+  } else if (current.type === 'doc') {
+    screen = (
+      <DocViewPage
+        slug={current.slug}
+        onBack={back}
+        onEdit={() => push({ type: 'editDoc', slug: current.slug })}
+        canManage={canAdminArea}
+      />
+    );
+  } else if (current.type === 'editDoc' && canAdminArea) {
+    screen = (
+      <DocEditorPage
+        slug={current.slug}
+        onBack={back}
+        allLocations={allLocations}
+        isAdmin={isAdmin}
+      />
+    );
+  } else if (current.type === 'newDoc' && canAdminArea) {
+    screen = (
+      <NewDocPage
+        onBack={back}
+        onCreated={(d) => reset({ type: 'editDoc', slug: d.slug })}
+      />
+    );
   } else if (current.type === 'tech') {
     screen = (
       <TechView
@@ -697,6 +744,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, canAdmin
           <nav className="hidden md:flex items-center gap-1">
             <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{canAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</NavBtn>
             <NavBtn active={view === 'tech'} onClick={() => onNavigate('tech')} icon={Wrench}>Технічка</NavBtn>
+            <NavBtn active={view === 'docs'} onClick={() => onNavigate('docs')} icon={FileText}>📋 Правила</NavBtn>
             {canAdmin && <NavBtn active={view === 'admin'} onClick={() => onNavigate('admin')} icon={Shield}>{isAdmin ? 'Адмін' : 'Керування'}</NavBtn>}
           </nav>
         </div>
@@ -760,6 +808,7 @@ function MobileBottomNav({ view, isAdmin, canAdmin, onNavigate, onProfile }) {
   const items = [
     { key: 'home', label: isAdmin ? 'Бібліотека' : 'Бібліотека', icon: BookOpen, onClick: () => onNavigate('home') },
     { key: 'tech', label: 'Технічка', icon: Wrench, onClick: () => onNavigate('tech') },
+    { key: 'docs', label: 'Правила', icon: FileText, onClick: () => onNavigate('docs') },
     { key: 'profile', label: 'Профіль', icon: User, onClick: onProfile },
   ];
   if (canAdmin) items.push({ key: 'admin', label: isAdmin ? 'Адмін' : 'Керування', icon: Shield, onClick: () => onNavigate('admin') });
@@ -791,7 +840,7 @@ function FilterChip({ label, onRemove }) {
   );
 }
 
-function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior = isAdmin, onTopicClick, onArticleClick, onOpenUser, onGoProfile, onOpenAnnouncements }) {
+function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior = isAdmin, onTopicClick, onArticleClick, onOpenUser, onGoProfile, onOpenAnnouncements, onOpenDoc }) {
   const { roleName, roleKeys, roleChipStyle, byKey } = useRoles();
   const roles = userRoles(user);
   const [roleFilter, setRoleFilter] = useState('all');
@@ -810,6 +859,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
   const [bdSoon, setBdSoon] = useState([]);
   const [digests, setDigests] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [mandatoryDocs, setMandatoryDocs] = useState([]);
   const [recent, setRecent] = useState(getRecent());
 
   useEffect(() => {
@@ -827,6 +877,10 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
 
     apiGet('/api/announcements').then((list) => {
       if (active) setAnnouncements(Array.isArray(list) ? list : []);
+    }).catch(() => {});
+
+    apiGet('/api/docs/me/mandatory-unread').then((list) => {
+      if (active) setMandatoryDocs(Array.isArray(list) ? list : []);
     }).catch(() => {});
 
     // Recent: перевіряємо існування й доступність, чистимо localStorage від мертвих id
@@ -965,6 +1019,8 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
           {isSenior ? 'Уся бібліотека знань Flolux' : `Ваші ролі — ${roles.map(roleName).join(', ').toLowerCase()}`}
         </p>
       </div>
+
+      <MandatoryDocsCard docs={mandatoryDocs} onOpen={onOpenDoc} />
 
       <HomeAnnouncements items={announcements} onChange={setAnnouncements} onSeeAll={onOpenAnnouncements} />
 
@@ -1298,6 +1354,32 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// Червона картка зверху HomeView, якщо є непідтверджені обов'язкові документи.
+function MandatoryDocsCard({ docs, onOpen }) {
+  if (!docs || docs.length === 0) return null;
+  return (
+    <div className="mb-6 rounded-lg border border-rose-300 bg-rose-50 dark:bg-rose-500/15 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <AlertCircle className="w-4 h-4 text-rose-600" />
+        <h2 className="text-sm uppercase tracking-wider text-rose-700 dark:text-rose-300">
+          Документи для ознайомлення ({docs.length})
+        </h2>
+      </div>
+      <div className="space-y-1.5">
+        {docs.map((d) => (
+          <button key={d.id} onClick={() => onOpen?.(d.slug)}
+            className="w-full text-left flex items-center justify-between gap-2 p-2 rounded bg-white dark:bg-stone-900 border border-rose-200 dark:border-rose-500/30 hover:border-rose-400">
+            <span className="text-sm text-stone-800 dark:text-stone-100 truncate">{d.title}</span>
+            <span className="text-xs text-rose-600 flex-shrink-0">
+              {d.needsReack ? '↻ Оновлено' : '❗ Прочитати'}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

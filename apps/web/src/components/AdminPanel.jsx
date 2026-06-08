@@ -30,6 +30,7 @@ function buildNav(isAdmin) {
   nav.push({ key: 'birthdays', label: '🎂 Дні народження', icon: Cake });
   nav.push({ key: 'digests', label: '📢 Дайджести', icon: Megaphone });
   nav.push({ key: 'announcements', label: '📢 Оголошення', icon: Bell });
+  nav.push({ key: 'docsReport', label: '📋 Звіт по документах', icon: FileText });
   return nav;
 }
 
@@ -94,6 +95,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
           {tab === 'birthdays' && <BirthdaysTab />}
           {tab === 'digests' && <DigestsTab onCreateDigest={onCreateDigest} />}
           {tab === 'announcements' && <AnnouncementsTab allLocations={allLocations} />}
+          {tab === 'docsReport' && <DocsReportTab onOpenUser={onOpenUser} />}
         </div>
       </div>
     </div>
@@ -2125,6 +2127,139 @@ function AnnouncementForm({ item, allLocations, roleKeys, roleName, onClose, onS
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============ 📋 ЗВІТ ПО ДОКУМЕНТАХ (HR/admin) ============
+function DocsReportTab({ onOpenUser }) {
+  const [docs, setDocs] = useState([]);
+  const [openId, setOpenId] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    apiGet('/api/docs').then((d) => setDocs(Array.isArray(d) ? d : [])).catch((e) => setError(e.message));
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5 md:p-6">
+        <h3 className="text-lg text-stone-800 dark:text-stone-100 mb-4">Документи ({docs.length})</h3>
+        {error && <div className="p-2 mb-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded">{error}</div>}
+        {docs.length === 0 ? (
+          <p className="text-sm text-stone-400 italic py-4 text-center">Документів немає</p>
+        ) : (
+          <div className="space-y-2">
+            {docs.map((d) => (
+              <DocReportRow key={d.id} doc={d} isOpen={openId === d.id} onToggle={() => setOpenId(openId === d.id ? null : d.id)} onOpenUser={onOpenUser} />
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function DocReportRow({ doc, isOpen, onToggle, onOpenUser }) {
+  const [data, setData] = useState(null);
+  const [busyRemind, setBusyRemind] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || data) return;
+    apiGet(`/api/docs/${doc.id}/acknowledgements`).then(setData).catch(() => {});
+  }, [isOpen]);
+
+  const remind = async (userIds) => {
+    if (!userIds.length) return;
+    setBusyRemind(true);
+    try {
+      await apiPost(`/api/docs/${doc.id}/remind`, { userIds });
+    } finally { setBusyRemind(false); }
+  };
+
+  const stats = data?.stats || { totalMandatory: 0, totalRead: 0, pct: 0 };
+  const pctText = stats.totalMandatory ? Math.round(stats.pct * 100) : null;
+
+  return (
+    <div className="border border-stone-200 dark:border-stone-700 rounded">
+      <button onClick={onToggle} className="w-full p-3 flex items-center gap-3 text-left">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-stone-800 dark:text-stone-100 truncate">{doc.title}</div>
+          <div className="text-xs text-stone-400">v{doc.currentVersion} · {doc.isPublished ? 'опубліковано' : 'чернетка'}</div>
+        </div>
+        {data && (
+          <div className="text-xs text-stone-500 dark:text-stone-400 flex-shrink-0 w-28">
+            {stats.totalMandatory === 0 ? (
+              <span className="italic">не обов'язк.</span>
+            ) : (
+              <>{pctText}% ({stats.totalRead} з {stats.totalMandatory})</>
+            )}
+          </div>
+        )}
+        <div className="w-32 flex-shrink-0 hidden sm:block">
+          {data && stats.totalMandatory > 0 && (
+            <div className="h-1.5 bg-stone-100 dark:bg-stone-800 rounded">
+              <div className="h-1.5 bg-emerald-500 rounded" style={{ width: `${pctText || 0}%` }} />
+            </div>
+          )}
+        </div>
+        <Check className={`w-4 h-4 transition ${isOpen ? 'rotate-90 text-rose-500' : 'text-stone-300'}`} />
+      </button>
+
+      {isOpen && (
+        <div className="border-t border-stone-200 dark:border-stone-700 p-3">
+          {!data ? (
+            <p className="text-xs text-stone-400 italic">Завантаження…</p>
+          ) : stats.totalMandatory === 0 ? (
+            <p className="text-xs text-stone-400 italic">Документ не є обов'язковим (без mandatory ролей/локацій)</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-wider text-emerald-700 mb-2 flex items-center gap-1">
+                  <Check className="w-3 h-3" /> Прочитали ({data.read.length})
+                </div>
+                <div className="space-y-1 max-h-72 overflow-y-auto">
+                  {data.read.length === 0 ? <p className="text-xs text-stone-400 italic">Поки нікого</p>
+                    : data.read.map((u) => (
+                      <div key={u.userId} className="flex items-center justify-between gap-2 text-xs p-2 rounded bg-emerald-50/40 dark:bg-emerald-500/5">
+                        <button onClick={() => onOpenUser?.(u.userId)} className="text-stone-700 dark:text-stone-200 hover:text-rose-600 truncate text-left">
+                          {u.name}
+                        </button>
+                        <span className="text-stone-400 flex-shrink-0">{u.acknowledgedAt ? new Date(u.acknowledgedAt).toLocaleDateString('uk-UA') : ''}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wider text-rose-700 mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1"><X className="w-3 h-3" /> Не прочитали ({data.unread.length})</span>
+                  {data.unread.length > 0 && (
+                    <button onClick={() => remind(data.unread.map((u) => u.userId))} disabled={busyRemind}
+                      className="text-xs px-2 py-0.5 rounded bg-rose-500 hover:bg-rose-600 text-white disabled:opacity-60">
+                      {busyRemind ? '…' : 'Нагадати всім'}
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1 max-h-72 overflow-y-auto">
+                  {data.unread.length === 0 ? <p className="text-xs text-stone-400 italic">Усі прочитали 🎉</p>
+                    : data.unread.map((u) => (
+                      <div key={u.userId} className="flex items-center justify-between gap-2 text-xs p-2 rounded bg-rose-50/40 dark:bg-rose-500/5">
+                        <button onClick={() => onOpenUser?.(u.userId)} className="text-stone-700 dark:text-stone-200 hover:text-rose-600 truncate text-left">
+                          {u.name}
+                          {u.acknowledgedAt && <span className="text-amber-600 ml-1">(стара версія)</span>}
+                        </button>
+                        <button onClick={() => remind([u.userId])} disabled={busyRemind}
+                          className="text-stone-400 hover:text-rose-600 text-[10px] flex-shrink-0 px-1.5 py-0.5 border border-stone-200 dark:border-stone-700 rounded">
+                          Нагадати
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

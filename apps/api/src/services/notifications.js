@@ -212,6 +212,72 @@ export async function notifyDigest(article, actor) {
   } catch (e) { console.error('[notifyDigest]', e.message); }
 }
 
+// Категорії документів — для людських заголовків сповіщень.
+const DOC_CATEGORY_LABELS = {
+  conduct: 'Правила поведінки',
+  schedule: 'Графік',
+  communication: 'Комунікація',
+  policies: 'Політика',
+};
+
+// Hr-set + admin отримають це сповіщення, тому що вони керують документами,
+// проте якщо вони ж і обов'язкові читачі — вони отримають його як звичайні.
+function docIsMandatoryFor(doc, roles, locIds) {
+  const hasRoles = (doc.mandatoryForRoles || []).length > 0;
+  const hasLocs = (doc.mandatoryForLocations || []).length > 0;
+  if (!hasRoles && !hasLocs) return false;
+  if (hasRoles && doc.mandatoryForRoles.some((r) => roles.includes(r))) return true;
+  if (hasLocs && doc.mandatoryForLocations.some((l) => locIds.includes(l))) return true;
+  return false;
+}
+
+// notify обов'язковим читачам про публікацію/нову версію документа.
+export async function notifyDocPublished(doc, actor, firstPublish) {
+  try {
+    const users = await prisma.user.findMany({
+      where: { approved: true, id: { not: actor?.id || undefined } },
+      include: {
+        roles: { select: { role: true } },
+        locations: { where: { approved: true }, select: { locationId: true } },
+      },
+    });
+    const recipientIds = users
+      .filter((u) => docIsMandatoryFor(doc, u.roles.map((r) => r.role), u.locations.map((l) => l.locationId)))
+      .map((u) => u.id);
+    if (recipientIds.length === 0) return;
+    const catLabel = DOC_CATEGORY_LABELS[doc.category] || 'Документ';
+    await notify({
+      recipientIds,
+      type: 'doc_published',
+      title: firstPublish ? `[${catLabel}] Новий документ` : `[${catLabel}] Документ оновлено`,
+      body: firstPublish
+        ? doc.title
+        : `${doc.title} — потрібне повторне підтвердження`,
+      linkPath: `/docs/${doc.slug}`,
+      actorId: actor?.id || null,
+      metadata: { docId: doc.id, version: doc.currentVersion, firstPublish: !!firstPublish },
+    });
+  } catch (e) { console.error('[notifyDocPublished]', e.message); }
+}
+
+// Нагадування юзерам, що не підтвердили прочитання.
+export async function notifyDocAckReminder(doc, userIds, actor) {
+  try {
+    const ids = (userIds || []).filter(Boolean);
+    if (ids.length === 0) return;
+    const catLabel = DOC_CATEGORY_LABELS[doc.category] || 'Документ';
+    await notify({
+      recipientIds: ids,
+      type: 'doc_reminder',
+      title: `[${catLabel}] Нагадування про документ`,
+      body: `Будь ласка, ознайомтесь: ${doc.title}`,
+      linkPath: `/docs/${doc.slug}`,
+      actorId: actor?.id || null,
+      metadata: { docId: doc.id, version: doc.currentVersion },
+    });
+  } catch (e) { console.error('[notifyDocAckReminder]', e.message); }
+}
+
 // Заголовки/мітки категорій оголошень.
 const ANNOUNCEMENT_LABELS = {
   urgent: 'Терміново',
