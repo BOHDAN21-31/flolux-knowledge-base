@@ -30,6 +30,16 @@ export const DOC_CATEGORIES = [
 
 export const docCategory = (key) => DOC_CATEGORIES.find((c) => c.key === key) || null;
 
+// Категорії курсів (LMS) — синхронізовано з apps/api/src/routes/courses.js
+export const COURSE_CATEGORIES = [
+  { key: 'onboarding', label: 'Онбординг', iconName: 'GraduationCap', color: '#10b981' },
+  { key: 'role_specific', label: 'Для ролі', iconName: 'Briefcase', color: '#3b82f6' },
+  { key: 'general', label: 'Загальні', iconName: 'BookOpen', color: '#a855f7' },
+  { key: 'advanced', label: 'Поглиблені', iconName: 'Award', color: '#f59e0b' },
+];
+
+export const courseCategory = (key) => COURSE_CATEGORIES.find((c) => c.key === key) || null;
+
 export const ANNOUNCEMENT_PRIORITIES = [
   { key: 'urgent', label: 'Терміновий', color: '#ef4444' },
   { key: 'high', label: 'Високий', color: '#f59e0b' },

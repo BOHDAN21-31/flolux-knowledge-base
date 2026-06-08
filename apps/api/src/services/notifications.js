@@ -348,6 +348,85 @@ export async function notifyAnnouncement(ann, actor) {
   } catch (e) { console.error('[notifyAnnouncement]', e.message); }
 }
 
+// Автозапис юзера на onboarding-курси при першому approve.
+// Знаходимо опубліковані курси з isOnboarding=true, де targetRoles порожнє
+// АБО містить хоча б одну роль юзера.
+export async function autoEnrollOnboarding(userId, actorId = null) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }, include: { roles: true },
+    });
+    if (!user) return;
+    const userRoles = (user.roles || []).map((r) => r.role);
+    const courses = await prisma.course.findMany({
+      where: { isOnboarding: true, publishedAt: { not: null } },
+    });
+    for (const c of courses) {
+      const targets = c.targetRoles || [];
+      const matches = targets.length === 0 || targets.some((r) => userRoles.includes(r));
+      if (!matches) continue;
+      const existing = await prisma.enrollment.findUnique({
+        where: { userId_courseId: { userId, courseId: c.id } },
+      });
+      if (existing) continue;
+      const due = c.dueDays ? new Date(Date.now() + c.dueDays * 86400e3) : null;
+      const enr = await prisma.enrollment.create({
+        data: { userId, courseId: c.id, enrolledBy: actorId, dueAt: due, status: 'assigned' },
+      });
+      notifyEnrollmentAssigned(enr, c, user, actorId ? { id: actorId } : null).catch(() => {});
+    }
+  } catch (e) { console.error('[autoEnrollOnboarding]', e.message); }
+}
+
+// ─── LMS: курси ───
+export async function notifyEnrollmentAssigned(enrollment, course, user, actor) {
+  try {
+    if (!user || user.id === actor?.id) return;
+    const dueText = enrollment.dueAt
+      ? `Дедлайн: ${new Date(enrollment.dueAt).toLocaleDateString('uk-UA')}`
+      : (course.estimatedMinutes ? `~${course.estimatedMinutes} хв` : null);
+    await notify({
+      recipientIds: [user.id],
+      type: 'course_assigned',
+      title: `🎓 Вам призначено курс`,
+      body: `${course.title}${dueText ? ' · ' + dueText : ''}`,
+      linkPath: `/courses/${course.slug}`,
+      actorId: actor?.id || null,
+      metadata: { courseId: course.id, enrollmentId: enrollment.id },
+    });
+  } catch (e) { console.error('[notifyEnrollmentAssigned]', e.message); }
+}
+
+export async function notifyCourseCompleted(enrollment, course, user) {
+  try {
+    if (!user) return;
+    await notify({
+      recipientIds: [user.id],
+      type: 'course_completed',
+      title: `🎉 Ви завершили курс`,
+      body: `${course.title} — сертифікат доступний у профілі`,
+      linkPath: `/courses/${course.slug}`,
+      metadata: { courseId: course.id, enrollmentId: enrollment.id },
+    });
+  } catch (e) { console.error('[notifyCourseCompleted]', e.message); }
+}
+
+export async function notifyCourseReminder(course, userIds, actor) {
+  try {
+    const ids = (userIds || []).filter(Boolean);
+    if (ids.length === 0) return;
+    await notify({
+      recipientIds: ids,
+      type: 'course_due_soon',
+      title: `🎓 Нагадування про курс`,
+      body: `Не забудьте пройти: ${course.title}`,
+      linkPath: `/courses/${course.slug}`,
+      actorId: actor?.id || null,
+      metadata: { courseId: course.id },
+    });
+  } catch (e) { console.error('[notifyCourseReminder]', e.message); }
+}
+
 // Раз на день генерує сповіщення про сьогоднішні дні народження.
 // Лінивий "планувальник": запланована стаття стала видимою → оповістити (1 раз).
 let lastScheduledCheck = 0;

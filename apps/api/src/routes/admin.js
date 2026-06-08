@@ -9,7 +9,7 @@ import {
 } from '../permissions.js';
 import { serializeLocation } from './locations.js';
 import { serializeRole } from './roles.js';
-import { notifyRoleAssigned, notifyLocationApproved } from '../services/notifications.js';
+import { notifyRoleAssigned, notifyLocationApproved, autoEnrollOnboarding } from '../services/notifications.js';
 
 const router = Router();
 
@@ -370,7 +370,11 @@ router.patch('/users/:id', wrap(async (req, res) => {
     await syncPrimaryRole(req.params.id);
   }
   if (approved !== undefined) {
+    const before = await prisma.user.findUnique({ where: { id: req.params.id }, select: { approved: true } });
     await prisma.user.update({ where: { id: req.params.id }, data: { approved: !!approved } });
+    if (approved && !before?.approved) {
+      autoEnrollOnboarding(req.params.id, req.user.id).catch(() => {});
+    }
   }
   const user = await prisma.user.findUnique({ where: { id: req.params.id }, include: { roles: true } });
   await logAction(req.user.id, 'user.updated', 'user', req.params.id, { assignedRole, approved });
@@ -384,8 +388,11 @@ router.post('/users/bulk', wrap(async (req, res) => {
   if (!ids.length) return res.status(400).json({ error: 'Не вибрано користувачів' });
 
   if (action === 'approve') {
+    const before = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, approved: true } });
+    const newlyApproved = before.filter((u) => !u.approved).map((u) => u.id);
     await prisma.user.updateMany({ where: { id: { in: ids } }, data: { approved: true } });
     await logAction(req.user.id, 'user.bulk_approved', 'user', null, { ids });
+    for (const uid of newlyApproved) autoEnrollOnboarding(uid, req.user.id).catch(() => {});
     return res.json({ ok: true, count: ids.length });
   }
   if (action === 'delete') {

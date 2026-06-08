@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, User, Star, FileText, MessageSquare, Lightbulb } from 'lucide-react';
+import { ArrowLeft, User, Star, FileText, MessageSquare, Lightbulb, GraduationCap, Award } from 'lucide-react';
 import { apiGet } from '../api';
 import { useRoles } from '../RolesContext';
 import { accountLevel } from '../level';
@@ -85,8 +85,38 @@ export default function PublicProfile({ userId, currentUser, onBack, onEditProfi
         </div>
       </div>
 
+      <CompletedCoursesSection userId={userId} />
+
       <div className="mt-6">
         <ActivityFeed userId={userId} onOpenArticle={onOpenArticle} />
+      </div>
+    </div>
+  );
+}
+
+function CompletedCoursesSection({ userId }) {
+  const [list, setList] = useState([]);
+  useEffect(() => {
+    apiGet(`/api/courses/users/${userId}/completed`)
+      .then((d) => setList(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, [userId]);
+  if (list.length === 0) return null;
+  return (
+    <div className="mt-6 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 md:p-6">
+      <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-3 flex items-center gap-2">
+        <Award className="w-4 h-4" /> Завершені курси ({list.length})
+      </h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {list.map((e) => (
+          <div key={e.enrollmentId} className="flex items-center gap-2 p-2 border border-stone-200 dark:border-stone-700 rounded">
+            <GraduationCap className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm text-stone-800 dark:text-stone-100 truncate">{e.course.title}</div>
+              <div className="text-xs text-stone-400">{new Date(e.completedAt).toLocaleDateString('uk-UA')}</div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

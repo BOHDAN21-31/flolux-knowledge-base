@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Lock, MapPin, Camera, Check, AlertCircle, Trash2, Fingerprint, Plus, Star, X } from 'lucide-react';
+import { User, Lock, MapPin, Camera, Check, AlertCircle, Trash2, Fingerprint, Plus, Star, X, GraduationCap, Award, Download } from 'lucide-react';
 import { apiGet, apiPatch, apiPost, apiDelete, apiUpload, webauthnRegister, webauthnSupported } from '../api';
 import { userRoles } from '../roles';
 import { useRoles } from '../RolesContext';
@@ -16,7 +16,7 @@ function Banner({ error, success }) {
 const SEC_TO_TAB = { data: 'personal', security: 'security', locations: 'locations', notifications: 'notifications' };
 const TAB_TO_SEC = { personal: 'data', security: 'security', locations: 'locations', notifications: 'notifications' };
 
-export default function ProfilePage({ user, allLocations, onRefresh, section = 'data', onSection, onOpenArticle }) {
+export default function ProfilePage({ user, allLocations, onRefresh, section = 'data', onSection, onOpenArticle, onOpenCourse, onOpenCertificate }) {
   const tab = SEC_TO_TAB[section] || 'personal';
   const setTab = (k) => onSection?.(TAB_TO_SEC[k] || 'data');
   const tabs = [
@@ -45,7 +45,12 @@ export default function ProfilePage({ user, allLocations, onRefresh, section = '
 
       {/* Mobile: лише активна секція */}
       <div className="md:hidden">
-        {tab === 'personal' && <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} onOpenArticle={onOpenArticle} />}
+        {tab === 'personal' && (
+          <>
+            <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} onOpenArticle={onOpenArticle} />
+            <MyCoursesSection onOpenCourse={onOpenCourse} onOpenCertificate={onOpenCertificate} />
+          </>
+        )}
         {tab === 'security' && <SecuritySection user={user} onRefresh={onRefresh} />}
         {tab === 'locations' && <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />}
         {tab === 'notifications' && <NotificationSettings />}
@@ -54,6 +59,7 @@ export default function ProfilePage({ user, allLocations, onRefresh, section = '
       {/* Desktop: усі секції на сторінці */}
       <div className="hidden md:block space-y-12">
         <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} onOpenArticle={onOpenArticle} />
+        <MyCoursesSection onOpenCourse={onOpenCourse} onOpenCertificate={onOpenCertificate} />
         <SecuritySection user={user} onRefresh={onRefresh} />
         <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />
         <NotificationSettings />
@@ -622,6 +628,66 @@ function TelegramSection() {
               <p className="text-xs text-stone-400 italic">Очікую підтвердження від Telegram…</p>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MyCoursesSection({ onOpenCourse, onOpenCertificate }) {
+  const [enrolls, setEnrolls] = useState([]);
+  useEffect(() => {
+    apiGet('/api/courses/me/list').then((d) => setEnrolls(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+  if (enrolls.length === 0) return null;
+  const active = enrolls.filter((e) => e.status !== 'completed');
+  const done = enrolls.filter((e) => e.status === 'completed');
+
+  return (
+    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+      <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4 flex items-center gap-2">
+        <GraduationCap className="w-4 h-4" /> Моє навчання
+      </h3>
+      {active.length > 0 && (
+        <div className="mb-4">
+          <div className="text-xs uppercase tracking-wider text-stone-400 mb-2">У процесі</div>
+          <div className="space-y-2">
+            {active.map((e) => (
+              <button key={e.id} onClick={() => onOpenCourse?.(e.course.slug)}
+                className="w-full text-left flex items-center gap-3 p-3 border border-stone-200 dark:border-stone-700 rounded hover:border-rose-300 transition">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-stone-800 dark:text-stone-100 truncate">{e.course.title}</div>
+                  <div className="text-xs text-stone-400">{e.completed} з {e.total} уроків ({e.progressPct}%)</div>
+                </div>
+                <div className="w-20 hidden sm:block">
+                  <div className="h-1.5 bg-stone-100 dark:bg-stone-800 rounded">
+                    <div className="h-1.5 rounded" style={{ width: `${e.progressPct}%`, background: '#fb7185' }} />
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {done.length > 0 && (
+        <div>
+          <div className="text-xs uppercase tracking-wider text-stone-400 mb-2 flex items-center gap-1">
+            <Award className="w-3 h-3" /> Завершені
+          </div>
+          <div className="space-y-2">
+            {done.map((e) => (
+              <div key={e.id} className="flex items-center gap-2 p-3 border border-emerald-200 bg-emerald-50/40 dark:bg-emerald-500/5 rounded">
+                <button onClick={() => onOpenCourse?.(e.course.slug)} className="flex-1 text-left min-w-0">
+                  <div className="text-sm text-stone-800 dark:text-stone-100 truncate">{e.course.title}</div>
+                  <div className="text-xs text-stone-400">Завершено {new Date(e.completedAt).toLocaleDateString('uk-UA')}</div>
+                </button>
+                <button onClick={() => onOpenCertificate?.(e.id)}
+                  className="text-xs px-2 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded flex items-center gap-1 flex-shrink-0">
+                  <Download className="w-3 h-3" /> Сертифікат
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

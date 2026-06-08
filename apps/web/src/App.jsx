@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, createElement } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2, Sun, Moon, Bookmark, FileText, Trash2 } from 'lucide-react';
+import { Flower2, Lock, Mail, User, LogOut, Shield, BookOpen, Plus, MessageSquare, Edit3, Check, X, Search, Settings, ChevronRight, AlertCircle, Send, Eye, EyeOff, Wrench, Printer, Monitor, Wifi, ArrowLeft, Star, Clock, Tag, Briefcase, MapPin, Fingerprint, ChevronDown, Link2, Sun, Moon, Bookmark, FileText, Trash2, GraduationCap, Award, PlayCircle, CheckCircle, Lock as LockIcon, Download } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete, setToken, clearToken, getToken, UNAUTHORIZED_EVENT, apiUpload, webauthnLogin, webauthnSupported } from './api';
 import ProfilePage from './components/ProfilePage';
 import PublicProfile from './components/PublicProfile';
@@ -11,6 +11,7 @@ import NotificationBell from './components/NotificationBell';
 import NotificationsPage from './components/NotificationsPage';
 import AnnouncementsPage, { AnnouncementCard } from './components/AnnouncementsPage';
 import DocsPage, { DocViewPage, DocEditorPage, NewDocPage } from './components/DocsPage';
+import CoursesPage, { CourseViewPage, LessonPlayerPage, CourseEditorPage, NewCoursePage, CertificatePage } from './components/CoursesPage';
 import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
 import Stars from './Stars';
 import { userRoles, isAdminUser, isSeniorUser } from './roles';
@@ -39,6 +40,12 @@ function pathForFrame(f) {
     case 'doc': return `/docs/${f.slug}`;
     case 'editDoc': return `/docs/${f.slug}/edit`;
     case 'newDoc': return '/docs/new';
+    case 'courses': return '/courses';
+    case 'course': return `/courses/${f.slug}`;
+    case 'lesson': return `/courses/${f.slug}/lessons/${f.lessonId}`;
+    case 'editCourse': return `/courses/${f.slug}/edit`;
+    case 'newCourse': return '/courses/new';
+    case 'certificate': return `/enrollments/${f.enrollmentId}/certificate`;
     default: return '/';
   }
 }
@@ -51,6 +58,8 @@ function frameFromPath(pathname) {
   if (p === '/digests/new') return { type: 'createDigest' };
   if (p === '/docs') return { type: 'docs' };
   if (p === '/docs/new') return { type: 'newDoc' };
+  if (p === '/courses') return { type: 'courses' };
+  if (p === '/courses/new') return { type: 'newCourse' };
   if (p === '/announcements') return { type: 'announcements' };
   {
     const m2 = p.match(/^\/announcements\/([^/]+)$/);
@@ -67,9 +76,13 @@ function frameFromPath(pathname) {
   if ((m = p.match(/^\/articles\/([^/]+)$/))) return { type: 'article', articleId: m[1] };
   if ((m = p.match(/^\/docs\/([^/]+)\/edit$/))) return { type: 'editDoc', slug: m[1] };
   if ((m = p.match(/^\/docs\/([^/]+)$/))) return { type: 'doc', slug: m[1] };
+  if ((m = p.match(/^\/courses\/([^/]+)\/edit$/))) return { type: 'editCourse', slug: m[1] };
+  if ((m = p.match(/^\/courses\/([^/]+)\/lessons\/([^/]+)$/))) return { type: 'lesson', slug: m[1], lessonId: m[2] };
+  if ((m = p.match(/^\/courses\/([^/]+)$/))) return { type: 'course', slug: m[1] };
+  if ((m = p.match(/^\/enrollments\/([^/]+)\/certificate$/))) return { type: 'certificate', enrollmentId: m[1] };
   return { type: 'home' };
 }
-const TOP_LEVEL = ['home', 'tech', 'admin', 'profile', 'notifications', 'docs'];
+const TOP_LEVEL = ['home', 'tech', 'admin', 'profile', 'notifications', 'docs', 'courses'];
 
 // ============ КОНСТАНТИ ============
 const REFERRAL_WORD = 'Flolux';
@@ -237,9 +250,10 @@ function AppInner() {
   const articleById = (id) => articles.find((a) => a.id === id) || null;
 
   // Тип фрейму -> підсвітка в навігації (home/tech/admin/profile або null)
-  const navView = ['home', 'tech', 'admin', 'profile', 'docs'].includes(current.type)
+  const navView = ['home', 'tech', 'admin', 'profile', 'docs', 'courses'].includes(current.type)
     ? current.type
-    : (current.type === 'doc' || current.type === 'editDoc' || current.type === 'newDoc' ? 'docs' : null);
+    : (['doc', 'editDoc', 'newDoc'].includes(current.type) ? 'docs'
+      : (['course', 'editCourse', 'newCourse', 'lesson', 'certificate'].includes(current.type) ? 'courses' : null));
 
   let screen = null;
   if (current.type === 'home') {
@@ -257,6 +271,7 @@ function AppInner() {
         onGoProfile={() => reset({ type: 'profile' })}
         onOpenAnnouncements={() => push({ type: 'announcements' })}
         onOpenDoc={(slug) => push({ type: 'doc', slug })}
+        onOpenCourse={(slug) => push({ type: 'course', slug })}
       />
     );
   } else if (current.type === 'profile') {
@@ -268,6 +283,8 @@ function AppInner() {
         section={current.section || 'data'}
         onSection={(s) => reset({ type: 'profile', section: s })}
         onOpenArticle={(id) => push({ type: 'article', articleId: id })}
+        onOpenCourse={(slug) => push({ type: 'course', slug })}
+        onOpenCertificate={(eid) => push({ type: 'certificate', enrollmentId: eid })}
       />
     );
   } else if (current.type === 'publicProfile') {
@@ -319,6 +336,54 @@ function AppInner() {
         onCreated={(d) => reset({ type: 'editDoc', slug: d.slug })}
       />
     );
+  } else if (current.type === 'courses') {
+    screen = (
+      <CoursesPage
+        onBack={back}
+        onOpenCourse={(c) => push({ type: 'course', slug: c.slug })}
+        onEditCourse={(c) => push({ type: 'editCourse', slug: c.slug })}
+        onCreateCourse={() => push({ type: 'newCourse' })}
+        canManage={canAdminArea}
+      />
+    );
+  } else if (current.type === 'course') {
+    screen = (
+      <CourseViewPage
+        slug={current.slug}
+        onBack={back}
+        onOpenLesson={(l) => push({ type: 'lesson', slug: current.slug, lessonId: l.id })}
+        onEdit={() => push({ type: 'editCourse', slug: current.slug })}
+        canManage={canAdminArea}
+      />
+    );
+  } else if (current.type === 'lesson') {
+    screen = (
+      <LessonPlayerPage
+        slug={current.slug}
+        lessonId={current.lessonId}
+        onBack={back}
+        onOpenLesson={(id) => reset({ type: 'lesson', slug: current.slug, lessonId: id })}
+        onOpenCertificate={(eid) => push({ type: 'certificate', enrollmentId: eid })}
+      />
+    );
+  } else if (current.type === 'editCourse' && canAdminArea) {
+    screen = (
+      <CourseEditorPage
+        slug={current.slug}
+        onBack={back}
+        allLocations={allLocations}
+        isAdmin={isAdmin}
+      />
+    );
+  } else if (current.type === 'newCourse' && canAdminArea) {
+    screen = (
+      <NewCoursePage
+        onBack={back}
+        onCreated={(c) => reset({ type: 'editCourse', slug: c.slug })}
+      />
+    );
+  } else if (current.type === 'certificate') {
+    screen = <CertificatePage enrollmentId={current.enrollmentId} onBack={back} />;
   } else if (current.type === 'tech') {
     screen = (
       <TechView
@@ -341,6 +406,9 @@ function AppInner() {
         onTab={(t) => reset({ type: 'admin', tab: t })}
         onOpenUser={(id) => id && push({ type: 'publicProfile', userId: id })}
         onCreateDigest={() => push({ type: 'createDigest' })}
+        onOpenCourses={() => push({ type: 'courses' })}
+        onCreateCourse={() => push({ type: 'newCourse' })}
+        onOpenCourse={(slug) => push({ type: 'editCourse', slug })}
       />
     );
   } else if (current.type === 'topic') {
@@ -745,6 +813,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, canAdmin
             <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{canAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</NavBtn>
             <NavBtn active={view === 'tech'} onClick={() => onNavigate('tech')} icon={Wrench}>Технічка</NavBtn>
             <NavBtn active={view === 'docs'} onClick={() => onNavigate('docs')} icon={FileText}>📋 Правила</NavBtn>
+            <NavBtn active={view === 'courses'} onClick={() => onNavigate('courses')} icon={GraduationCap}>🎓 Навчання</NavBtn>
             {canAdmin && <NavBtn active={view === 'admin'} onClick={() => onNavigate('admin')} icon={Shield}>{isAdmin ? 'Адмін' : 'Керування'}</NavBtn>}
           </nav>
         </div>
@@ -806,12 +875,12 @@ function NavBtn({ active, onClick, icon: Icon, children }) {
 // Нижня навігація для мобільного (основні розділи). Десктоп — прихована.
 function MobileBottomNav({ view, isAdmin, canAdmin, onNavigate, onProfile }) {
   const items = [
-    { key: 'home', label: isAdmin ? 'Бібліотека' : 'Бібліотека', icon: BookOpen, onClick: () => onNavigate('home') },
-    { key: 'tech', label: 'Технічка', icon: Wrench, onClick: () => onNavigate('tech') },
+    { key: 'home', label: 'Бібліотека', icon: BookOpen, onClick: () => onNavigate('home') },
     { key: 'docs', label: 'Правила', icon: FileText, onClick: () => onNavigate('docs') },
+    { key: 'courses', label: 'Навчання', icon: GraduationCap, onClick: () => onNavigate('courses') },
     { key: 'profile', label: 'Профіль', icon: User, onClick: onProfile },
   ];
-  if (canAdmin) items.push({ key: 'admin', label: isAdmin ? 'Адмін' : 'Керування', icon: Shield, onClick: () => onNavigate('admin') });
+  if (canAdmin) items.splice(3, 0, { key: 'admin', label: isAdmin ? 'Адмін' : 'Керування', icon: Shield, onClick: () => onNavigate('admin') });
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 flex"
@@ -840,7 +909,7 @@ function FilterChip({ label, onRemove }) {
   );
 }
 
-function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior = isAdmin, onTopicClick, onArticleClick, onOpenUser, onGoProfile, onOpenAnnouncements, onOpenDoc }) {
+function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior = isAdmin, onTopicClick, onArticleClick, onOpenUser, onGoProfile, onOpenAnnouncements, onOpenDoc, onOpenCourse }) {
   const { roleName, roleKeys, roleChipStyle, byKey } = useRoles();
   const roles = userRoles(user);
   const [roleFilter, setRoleFilter] = useState('all');
@@ -860,6 +929,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
   const [digests, setDigests] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [mandatoryDocs, setMandatoryDocs] = useState([]);
+  const [onboarding, setOnboarding] = useState(null);
   const [recent, setRecent] = useState(getRecent());
 
   useEffect(() => {
@@ -881,6 +951,10 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
 
     apiGet('/api/docs/me/mandatory-unread').then((list) => {
       if (active) setMandatoryDocs(Array.isArray(list) ? list : []);
+    }).catch(() => {});
+
+    apiGet('/api/courses/me/onboarding').then((d) => {
+      if (active) setOnboarding(d || null);
     }).catch(() => {});
 
     // Recent: перевіряємо існування й доступність, чистимо localStorage від мертвих id
@@ -1019,6 +1093,8 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
           {isSenior ? 'Уся бібліотека знань Flolux' : `Ваші ролі — ${roles.map(roleName).join(', ').toLowerCase()}`}
         </p>
       </div>
+
+      <OnboardingCard enrollment={onboarding} onOpen={onOpenCourse} />
 
       <MandatoryDocsCard docs={mandatoryDocs} onOpen={onOpenDoc} />
 
@@ -1354,6 +1430,43 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// Жовта картка зверху HomeView для onboarding-курсу (якщо не завершено).
+function OnboardingCard({ enrollment, onOpen }) {
+  if (!enrollment || enrollment.status === 'completed') return null;
+  const pct = enrollment.progressPct || 0;
+  return (
+    <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-500/15 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <GraduationCap className="w-4 h-4 text-amber-700" />
+        <h2 className="text-sm uppercase tracking-wider text-amber-700 dark:text-amber-300">
+          Базовий курс новачка
+        </h2>
+      </div>
+      <div className="text-stone-800 dark:text-stone-100 mb-1 text-base">{enrollment.course.title}</div>
+      {enrollment.course.description && (
+        <p className="text-xs text-stone-600 dark:text-stone-300 mb-3 line-clamp-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          {enrollment.course.description}
+        </p>
+      )}
+      {enrollment.total > 0 && (
+        <div className="mb-3">
+          <div className="flex items-center justify-between text-xs text-stone-600 dark:text-stone-300 mb-1">
+            <span>Прогрес: {enrollment.completed} з {enrollment.total} уроків</span>
+            <span>{pct}%</span>
+          </div>
+          <div className="h-2 bg-white dark:bg-stone-800 rounded">
+            <div className="h-2 rounded transition-all" style={{ width: `${pct}%`, background: '#f59e0b' }} />
+          </div>
+        </div>
+      )}
+      <button onClick={() => onOpen?.(enrollment.course.slug)}
+        className="px-4 min-h-[44px] bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm" style={{ fontFamily: 'system-ui, sans-serif' }}>
+        {enrollment.status === 'assigned' ? 'Почати' : 'Продовжити'} →
+      </button>
     </div>
   );
 }

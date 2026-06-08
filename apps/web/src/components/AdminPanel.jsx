@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Users, MapPin, Inbox, BookOpen, MessageSquare, ScrollText,
   Shield, Plus, Trash2, X, Search, ChevronRight, FileText, Cake, Megaphone, Key,
   KeyRound, Check, AlertCircle, Settings as SettingsIcon, Clock, Wrench, Bell,
+  GraduationCap, Award,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api';
 import { useRoles } from '../RolesContext';
@@ -31,10 +32,11 @@ function buildNav(isAdmin) {
   nav.push({ key: 'digests', label: '📢 Дайджести', icon: Megaphone });
   nav.push({ key: 'announcements', label: '📢 Оголошення', icon: Bell });
   nav.push({ key: 'docsReport', label: '📋 Звіт по документах', icon: FileText });
+  nav.push({ key: 'lms', label: '🎓 Навчання', icon: GraduationCap });
   return nav;
 }
 
-export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, isAdmin = true, tab: tabProp, onTab, onOpenUser, onCreateDigest }) {
+export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocations, reloadLocations, reloadArticles, isAdmin = true, tab: tabProp, onTab, onOpenUser, onCreateDigest, onOpenCourses, onCreateCourse, onOpenCourse }) {
   const NAV = buildNav(isAdmin);
   // Захист: HR не може потрапити на admin-only вкладку через URL — fallback на дозволену.
   const allowed = NAV.map((n) => n.key);
@@ -96,6 +98,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
           {tab === 'digests' && <DigestsTab onCreateDigest={onCreateDigest} />}
           {tab === 'announcements' && <AnnouncementsTab allLocations={allLocations} />}
           {tab === 'docsReport' && <DocsReportTab onOpenUser={onOpenUser} />}
+          {tab === 'lms' && <LmsTab onOpenCourses={onOpenCourses} onCreateCourse={onCreateCourse} onOpenCourse={onOpenCourse} />}
         </div>
       </div>
     </div>
@@ -2261,5 +2264,106 @@ function DocReportRow({ doc, isOpen, onToggle, onOpenUser }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ============ 🎓 LMS: НАВЧАННЯ (admin/HR) ============
+function LmsTab({ onOpenCourses, onCreateCourse, onOpenCourse }) {
+  const [courses, setCourses] = useState([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    apiGet('/api/courses').then((d) => setCourses(Array.isArray(d) ? d : [])).catch((e) => setError(e.message));
+  }, []);
+
+  // Підсумкова статистика
+  const stats = courses.reduce(
+    (acc, c) => {
+      acc.total++;
+      if (c.isPublished) acc.published++;
+      return acc;
+    },
+    { total: 0, published: 0 }
+  );
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">Курси ({courses.length})</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={onOpenCourses} className="text-sm px-3 min-h-[40px] rounded-md border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 hover:text-rose-600">
+              Переглянути каталог
+            </button>
+            <button onClick={onCreateCourse}
+              className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+              <Plus className="w-4 h-4" /> Новий курс
+            </button>
+          </div>
+        </div>
+        {error && <div className="p-2 mb-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded">{error}</div>}
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+          <StatCard label="Усього курсів" value={stats.total} />
+          <StatCard label="Опубліковано" value={stats.published} accent="emerald" />
+          <StatCard label="Чернеток" value={stats.total - stats.published} accent="amber" />
+        </div>
+
+        {courses.length === 0 ? (
+          <p className="text-sm text-stone-400 italic py-4 text-center">Курсів ще немає</p>
+        ) : (
+          <div className="space-y-2">
+            {courses.map((c) => (
+              <LmsCourseRow key={c.id} course={c} onOpen={() => onOpenCourse?.(c.slug)} />
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }) {
+  const accentCls = accent === 'emerald' ? 'text-emerald-700' : accent === 'amber' ? 'text-amber-700' : 'text-stone-800 dark:text-stone-100';
+  return (
+    <div className="p-4 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900">
+      <div className="text-xs uppercase tracking-wider text-stone-400 mb-1">{label}</div>
+      <div className={`text-2xl ${accentCls}`}>{value}</div>
+    </div>
+  );
+}
+
+function LmsCourseRow({ course, onOpen }) {
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    apiGet(`/api/courses/${course.id}/enrollments`).then((list) => {
+      const items = Array.isArray(list) ? list : [];
+      const total = items.length;
+      const done = items.filter((e) => e.status === 'completed').length;
+      const inProgress = items.filter((e) => e.status === 'in_progress').length;
+      const overdue = items.filter((e) => e.dueAt && e.dueAt < Date.now() && e.status !== 'completed').length;
+      setStats({ total, done, inProgress, overdue });
+    }).catch(() => {});
+  }, [course.id]);
+
+  return (
+    <button onClick={onOpen} className="w-full text-left flex items-center gap-3 p-3 border border-stone-200 dark:border-stone-700 rounded hover:border-rose-300 transition">
+      <div className="flex-1 min-w-0">
+        <div className="text-sm text-stone-800 dark:text-stone-100 truncate">{course.title}</div>
+        <div className="text-xs text-stone-400 flex items-center gap-2 flex-wrap">
+          {course.isPublished ? <span className="text-emerald-600">опубліковано</span> : <span>чернетка</span>}
+          {course.isOnboarding && <span className="text-amber-600">· онбординг</span>}
+          <span>· {course.lessonsCount} уроків</span>
+          {stats && <span>· {stats.total} призначень</span>}
+          {stats?.overdue > 0 && <span className="text-rose-600">· {stats.overdue} прострочених</span>}
+        </div>
+      </div>
+      {stats && stats.total > 0 && (
+        <div className="text-xs text-stone-500 dark:text-stone-400 hidden sm:block w-28 flex-shrink-0">
+          {Math.round((stats.done / stats.total) * 100)}% ({stats.done} з {stats.total})
+        </div>
+      )}
+      <ChevronRight className="w-4 h-4 text-stone-300" />
+    </button>
   );
 }

@@ -47,6 +47,9 @@ model User {
   docs                  CompanyDoc[]
   docVersions           DocVersion[]
   docAcknowledgements   DocAcknowledgement[]
+  courses               Course[]                @relation("courseAuthor")
+  enrollments           Enrollment[]            @relation("enrollmentUser")
+  enrolledByMe          Enrollment[]            @relation("enrollmentEnroller")
 }
 
 model Announcement {
@@ -151,6 +154,84 @@ model DocAcknowledgement {
   @@unique([docId, userId, versionAcknowledged])
   @@index([docId])
   @@index([userId])
+}
+
+// LMS: курси з послідовними уроками, ручне призначення.
+model Course {
+  id               String       @id @default(cuid())
+  slug             String       @unique
+  title            String
+  description      String?
+  category         String
+  iconKey          String?
+  color            String?
+  coverUrl         String?
+  estimatedMinutes Int?
+  targetRoles      String[]     @default([])
+  isOnboarding     Boolean      @default(false)
+  finalQuizId      String?
+  dueDays          Int?
+  publishedAt      DateTime?
+  authorId         String?
+  author           User?        @relation("courseAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  lessons          Lesson[]
+  enrollments      Enrollment[]
+
+  @@index([category])
+  @@index([isOnboarding])
+  @@index([publishedAt])
+}
+
+model Lesson {
+  id               String           @id @default(cuid())
+  courseId         String
+  course           Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title            String
+  body             String?
+  videoUrl         String?
+  attachments      Json?
+  orderIdx         Int              @default(0)
+  estimatedMinutes Int?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  progress         LessonProgress[]
+
+  @@index([courseId, orderIdx])
+}
+
+model Enrollment {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation("enrollmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrolledBy  String?
+  enroller    User?            @relation("enrollmentEnroller", fields: [enrolledBy], references: [id], onDelete: SetNull)
+  enrolledAt  DateTime         @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  dueAt       DateTime?
+  status      String           @default("assigned")
+  progress    LessonProgress[]
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([status])
+}
+
+model LessonProgress {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lessonId     String
+  lesson       Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completedAt  DateTime?
+  secondsSpent Int        @default(0)
+
+  @@unique([enrollmentId, lessonId])
+  @@index([enrollmentId])
 }
 
 // Каталог дозволів (індивідуальні права поверх ролей).

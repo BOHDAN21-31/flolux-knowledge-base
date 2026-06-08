@@ -22,6 +22,7 @@ import birthdayRoutes from './routes/birthdays.js';
 import digestRoutes from './routes/digests.js';
 import announcementRoutes from './routes/announcements.js';
 import companyDocsRoutes from './routes/company-docs.js';
+import coursesRoutes from './routes/courses.js';
 import telegramRoutes from './routes/telegram.js';
 import uploadRoutes, { UPLOAD_DIR } from './routes/upload.js';
 import webauthnRoutes from './routes/webauthn.js';
@@ -53,6 +54,7 @@ app.use('/api/birthdays', birthdayRoutes);
 app.use('/api/digests', digestRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/docs', companyDocsRoutes);
+app.use('/api/courses', coursesRoutes);
 app.use('/api/telegram', telegramRoutes); // webhook — без auth (перевірка через secret_token)
 app.use('/api/upload', uploadRoutes);
 
