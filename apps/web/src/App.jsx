@@ -13,6 +13,7 @@ import AnnouncementsPage, { AnnouncementCard } from './components/AnnouncementsP
 import DocsPage, { DocViewPage, DocEditorPage, NewDocPage } from './components/DocsPage';
 import CoursesPage, { CourseViewPage, LessonPlayerPage, CourseEditorPage, NewCoursePage, CertificatePage } from './components/CoursesPage';
 import { QuizPlayerPage, AttemptResultPage, QuizEditorPage } from './components/QuizPages';
+import InstallPrompt from './components/InstallPrompt';
 import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
 import Stars from './Stars';
 import { userRoles, isAdminUser, isSeniorUser } from './roles';
@@ -546,6 +547,8 @@ function AppInner() {
           else if (kind === 'locations') reset({ type: 'profile', section: 'locations' });
         }}
       />
+
+      {currentUser && <InstallPrompt />}
     </div>
   );
 }
@@ -829,12 +832,12 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, canAdmin
   return (
     <header className="sticky top-0 z-40 bg-white/90 dark:bg-stone-900/90 backdrop-blur border-b border-stone-200 dark:border-stone-700">
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between gap-3 min-w-0">
-        <div className="flex items-center gap-4 lg:gap-8 min-w-0 flex-shrink">
+        <div className="flex items-center gap-3 lg:gap-6 min-w-0 flex-shrink overflow-hidden">
           <button onClick={() => onNavigate('home')} className="flex items-center gap-3 group min-w-0 flex-shrink-0">
             <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-500/15 flex items-center justify-center border border-rose-200 dark:border-rose-500/30 group-hover:bg-rose-100 transition flex-shrink-0">
               <Flower2 className="w-5 h-5 text-rose-500" strokeWidth={1.5} />
             </div>
-            <div className="min-w-0 hidden sm:block">
+            <div className="min-w-0 hidden sm:block md:hidden lg:block">
               <div className="text-xl tracking-widest text-stone-800 dark:text-stone-100">FLOLUX</div>
               <div className="text-xs text-stone-400 italic -mt-0.5">База знань</div>
             </div>
@@ -853,12 +856,12 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, canAdmin
         {/* Desktop: пошук + тема + ім'я + аватар + вихід */}
         <div className="hidden md:flex items-center gap-2 lg:gap-3 flex-shrink-0 min-w-0">
           <button onClick={onOpenSearch}
-            className="hidden lg:flex items-center gap-2 px-3 min-h-[40px] rounded-md border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-rose-300 text-sm"
+            className="hidden xl:flex items-center gap-2 px-3 min-h-[40px] rounded-md border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-rose-300 text-sm"
             style={{ fontFamily: 'system-ui, sans-serif' }} title="Пошук">
             <Search className="w-4 h-4" /> Пошук <kbd className="text-xs text-stone-400">⌘K</kbd>
           </button>
           <button onClick={onOpenSearch}
-            className="lg:hidden w-11 h-11 flex items-center justify-center text-stone-500 dark:text-stone-400 hover:text-rose-500" title="Пошук">
+            className="xl:hidden w-11 h-11 flex items-center justify-center text-stone-500 dark:text-stone-400 hover:text-rose-500" title="Пошук">
             <Search className="w-5 h-5" />
           </button>
           <button onClick={onToggleTheme} className="w-11 h-11 flex items-center justify-center text-stone-500 dark:text-stone-400 hover:text-rose-500" title="Тема">
@@ -901,7 +904,7 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, canAdmin
 function NavBtn({ active, onClick, icon: Icon, children }) {
   return (
     <button onClick={onClick}
-      className={`flex items-center gap-1.5 lg:gap-2 px-2 lg:px-4 min-h-[44px] rounded-md text-sm whitespace-nowrap transition ${active ? 'bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-50 dark:hover:bg-stone-800/60'}`}>
+      className={`flex items-center gap-1.5 px-2 xl:px-3 min-h-[44px] rounded-md text-sm whitespace-nowrap transition ${active ? 'bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-50 dark:hover:bg-stone-800/60'}`}>
       <Icon className="w-4 h-4 flex-shrink-0" />
       {children}
     </button>
