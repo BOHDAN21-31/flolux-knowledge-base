@@ -2,13 +2,14 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard, Users, MapPin, Inbox, BookOpen, MessageSquare, ScrollText,
   Shield, Plus, Trash2, X, Search, ChevronRight, FileText, Cake, Megaphone, Key,
-  KeyRound, Check,
+  KeyRound, Check, AlertCircle, Settings as SettingsIcon, Clock, Wrench, Bell,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api';
 import { useRoles } from '../RolesContext';
 import { useConfirm } from './ConfirmDialog';
 import { TOPIC_ICON_NAMES, iconFor } from '../icons';
 import Stars from '../Stars';
+import { DIGEST_CATEGORIES, digestCategory, ANNOUNCEMENT_CATEGORIES, announcementCategory, ANNOUNCEMENT_PRIORITIES } from '../constants';
 
 const fmtDate = (ms) => new Date(ms).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -28,6 +29,7 @@ function buildNav(isAdmin) {
   nav.push({ key: 'audit', label: 'Журнал дій', icon: ScrollText });
   nav.push({ key: 'birthdays', label: '🎂 Дні народження', icon: Cake });
   nav.push({ key: 'digests', label: '📢 Дайджести', icon: Megaphone });
+  nav.push({ key: 'announcements', label: '📢 Оголошення', icon: Bell });
   return nav;
 }
 
@@ -91,6 +93,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
           {tab === 'audit' && <AuditTab />}
           {tab === 'birthdays' && <BirthdaysTab />}
           {tab === 'digests' && <DigestsTab onCreateDigest={onCreateDigest} />}
+          {tab === 'announcements' && <AnnouncementsTab allLocations={allLocations} />}
         </div>
       </div>
     </div>
@@ -1424,25 +1427,52 @@ function BirthdaysTab() {
 // ============ 📢 ДАЙДЖЕСТИ (HR/admin) ============
 function DigestsTab({ onCreateDigest }) {
   const [items, setItems] = useState([]);
+  const [catFilter, setCatFilter] = useState('all');
   useEffect(() => { apiGet('/api/digests').then(setItems).catch(() => {}); }, []);
+
+  const shown = catFilter === 'all' ? items : items.filter((d) => d.digestCategory === catFilter);
 
   return (
     <div className="space-y-4">
       <Card className="p-5 md:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg text-stone-800 dark:text-stone-100">Дайджести ({items.length})</h3>
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">Дайджести ({shown.length})</h3>
           <button onClick={() => onCreateDigest?.()} className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
             <Plus className="w-4 h-4" /> Створити дайджест
           </button>
         </div>
-        <div className="space-y-2">
-          {items.map((d) => (
-            <div key={d.id} className="flex items-center justify-between gap-3 p-3 border border-stone-200 dark:border-stone-700 rounded">
-              <span className="text-sm text-stone-800 dark:text-stone-100">{d.title}</span>
-              <span className="text-xs text-stone-400">{new Date(d.createdAt).toLocaleDateString('uk-UA')} · {d.status === 'draft' ? 'чернетка' : 'опубліковано'}</span>
-            </div>
+        <div className="flex flex-wrap gap-1.5 mb-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          <button onClick={() => setCatFilter('all')}
+            className={`px-3 py-1 rounded-full text-xs border transition ${catFilter === 'all' ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}>
+            Усі
+          </button>
+          {DIGEST_CATEGORIES.map((c) => (
+            <button key={c.key} onClick={() => setCatFilter(c.key)}
+              className={`px-3 py-1 rounded-full text-xs border transition flex items-center gap-1 ${catFilter === c.key ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}
+              style={catFilter === c.key ? { background: c.color } : undefined}>
+              <span>{c.icon}</span>{c.label}
+            </button>
           ))}
-          {items.length === 0 && <p className="text-sm text-stone-400 italic py-4 text-center">Ще немає дайджестів</p>}
+        </div>
+        <div className="space-y-2">
+          {shown.map((d) => {
+            const c = digestCategory(d.digestCategory);
+            return (
+              <div key={d.id} className="flex items-center justify-between gap-3 p-3 border border-stone-200 dark:border-stone-700 rounded">
+                <div className="flex items-center gap-2 min-w-0">
+                  {c && (
+                    <span className="text-xs px-2 py-0.5 rounded-full text-white flex items-center gap-1 flex-shrink-0"
+                      style={{ background: c.color }}>
+                      <span>{c.icon}</span>{c.label}
+                    </span>
+                  )}
+                  <span className="text-sm text-stone-800 dark:text-stone-100 truncate">{d.title}</span>
+                </div>
+                <span className="text-xs text-stone-400 flex-shrink-0">{new Date(d.createdAt).toLocaleDateString('uk-UA')} · {d.status === 'draft' ? 'чернетка' : 'опубліковано'}</span>
+              </div>
+            );
+          })}
+          {shown.length === 0 && <p className="text-sm text-stone-400 italic py-4 text-center">Ще немає дайджестів</p>}
         </div>
       </Card>
     </div>
@@ -1796,5 +1826,305 @@ function PresetsSubTab() {
         </div>
       )}
     </Card>
+  );
+}
+
+
+// ============ 📢 ОГОЛОШЕННЯ (admin / HR / content.publish_digest) ============
+const ANN_CAT_ICONS = { AlertCircle, Settings: SettingsIcon, Clock, Wrench, Users };
+
+function AnnouncementsTab({ allLocations = [] }) {
+  const { roleKeys, roleName } = useRoles();
+  const confirm = useConfirm();
+  const [items, setItems] = useState([]);
+  const [filter, setFilter] = useState('active');
+  const [catFilter, setCatFilter] = useState('all');
+  const [editing, setEditing] = useState(null);
+  const [error, setError] = useState('');
+
+  const load = () => {
+    apiGet('/api/announcements?all=1').then((d) => setItems(Array.isArray(d) ? d : [])).catch((e) => setError(e.message));
+  };
+  useEffect(() => { load(); }, []);
+
+  const now = Date.now();
+  const shown = items.filter((a) => {
+    if (filter === 'active' && a.expiresAt && a.expiresAt <= now) return false;
+    if (filter === 'expired' && (!a.expiresAt || a.expiresAt > now)) return false;
+    if (catFilter !== 'all' && a.category !== catFilter) return false;
+    return true;
+  });
+
+  const remove = async (a) => {
+    const ok = await confirm({ title: 'Видалити оголошення?', description: a.title, confirmLabel: 'Видалити' });
+    if (!ok) return;
+    await apiDelete(`/api/announcements/${a.id}`).catch((e) => setError(e.message));
+    load();
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">Оголошення ({shown.length})</h3>
+          <button onClick={() => setEditing('new')}
+            className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+            <Plus className="w-4 h-4" /> Створити оголошення
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 mb-4" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          {[['active', 'Активні'], ['expired', 'Завершені'], ['all', 'Усі']].map(([k, l]) => (
+            <button key={k} onClick={() => setFilter(k)}
+              className={`px-3 py-1 rounded-full text-xs border transition ${filter === k ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}>
+              {l}
+            </button>
+          ))}
+          <span className="mx-2 self-center text-stone-300">|</span>
+          <button onClick={() => setCatFilter('all')}
+            className={`px-3 py-1 rounded-full text-xs border transition ${catFilter === 'all' ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}>
+            Усі категорії
+          </button>
+          {ANNOUNCEMENT_CATEGORIES.map((c) => (
+            <button key={c.key} onClick={() => setCatFilter(c.key)}
+              className={`px-3 py-1 rounded-full text-xs border transition ${catFilter === c.key ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}
+              style={catFilter === c.key ? { background: c.color } : undefined}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+
+        {error && <div className="p-2 mb-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded">{error}</div>}
+
+        <div className="space-y-2">
+          {shown.map((a) => {
+            const c = announcementCategory(a.category);
+            const Icon = c ? (ANN_CAT_ICONS[c.iconName] || AlertCircle) : AlertCircle;
+            const expired = a.expiresAt && a.expiresAt <= now;
+            return (
+              <div key={a.id} className={`flex items-start justify-between gap-3 p-3 border rounded ${expired ? 'opacity-60 border-stone-200 dark:border-stone-700' : 'border-stone-200 dark:border-stone-700'}`}>
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="w-8 h-8 rounded flex-shrink-0 flex items-center justify-center"
+                    style={{ background: `${c?.color || '#78716c'}1a`, color: c?.color || '#78716c' }}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                      {a.pinned && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Закріплено</span>}
+                      {a.priority === 'urgent' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-600 text-white">URGENT</span>}
+                      {a.priority === 'high' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-600 text-white">HIGH</span>}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded text-white" style={{ background: c?.color || '#78716c' }}>{c?.label || a.category}</span>
+                    </div>
+                    <div className="text-sm text-stone-800 dark:text-stone-100 truncate">{a.title}</div>
+                    <div className="text-xs text-stone-400">
+                      {new Date(a.createdAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}
+                      {a.expiresAt && <span> · до {new Date(a.expiresAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}</span>}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => setEditing(a)} className="w-9 h-9 flex items-center justify-center text-stone-500 hover:text-rose-600" title="Редагувати">
+                    <SettingsIcon className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => remove(a)} className="w-9 h-9 flex items-center justify-center text-stone-400 hover:text-rose-600" title="Видалити">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {shown.length === 0 && <p className="text-sm text-stone-400 italic py-4 text-center">Немає оголошень</p>}
+        </div>
+      </Card>
+
+      {editing && (
+        <AnnouncementForm
+          item={editing === 'new' ? null : editing}
+          allLocations={allLocations}
+          roleKeys={roleKeys}
+          roleName={roleName}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AnnouncementForm({ item, allLocations, roleKeys, roleName, onClose, onSaved }) {
+  const isEdit = !!item?.id;
+  const toLocalInput = (ms) => {
+    if (!ms) return '';
+    const d = new Date(ms);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const [form, setForm] = useState({
+    title: item?.title || '',
+    body: item?.body || '',
+    category: item?.category || ANNOUNCEMENT_CATEGORIES[0].key,
+    priority: item?.priority || 'normal',
+    pinned: !!item?.pinned,
+    expiresAt: toLocalInput(item?.expiresAt),
+  });
+  const [targetMode, setTargetMode] = useState(() => {
+    if ((item?.targetRoles?.length || 0) > 0) return 'roles';
+    if ((item?.targetLocations?.length || 0) > 0) return 'locations';
+    return 'all';
+  });
+  const [targetRoles, setTargetRoles] = useState(item?.targetRoles || []);
+  const [targetLocations, setTargetLocations] = useState(item?.targetLocations || []);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const toggle = (arr, set, v) => set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+
+  const save = async () => {
+    setError('');
+    if (!form.title.trim() || !form.body.trim()) return setError('Заповніть назву та текст');
+    if (form.title.length > 100) return setError('Назва — до 100 символів');
+    setBusy(true);
+    const payload = {
+      title: form.title.trim(),
+      body: form.body.trim(),
+      category: form.category,
+      priority: form.priority,
+      pinned: form.pinned,
+      expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
+      targetRoles: targetMode === 'roles' ? targetRoles : [],
+      targetLocations: targetMode === 'locations' ? targetLocations : [],
+    };
+    try {
+      if (isEdit) await apiPatch(`/api/announcements/${item.id}`, payload);
+      else await apiPost('/api/announcements', payload);
+      onSaved?.();
+    } catch (e) {
+      setError(e.message); setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch md:items-center justify-center md:p-4">
+      <div className="bg-white dark:bg-stone-900 w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
+        <div className="p-4 md:p-6 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between sticky top-0 bg-white dark:bg-stone-900 z-10">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-stone-400 mb-1">{isEdit ? 'Редагування' : 'Нове оголошення'}</p>
+            <h2 className="text-lg md:text-xl text-stone-800 dark:text-stone-100">{form.title || 'Без назви'}</h2>
+          </div>
+          <button onClick={onClose} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-700"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Заголовок (до 100 символів)</label>
+            <input type="text" maxLength={100} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md bg-transparent" />
+            <div className="text-xs text-stone-400 mt-1">{form.title.length}/100</div>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Текст</label>
+            <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })}
+              rows={6} placeholder="Markdown підтримується"
+              className="w-full p-3 border border-stone-200 dark:border-stone-700 rounded-md bg-transparent" />
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Категорія</label>
+            <div className="flex flex-wrap gap-2">
+              {ANNOUNCEMENT_CATEGORIES.map((c) => {
+                const Icon = ANN_CAT_ICONS[c.iconName] || AlertCircle;
+                const on = form.category === c.key;
+                return (
+                  <button key={c.key} type="button" onClick={() => setForm({ ...form, category: c.key })}
+                    className={`px-3 min-h-[40px] rounded-full text-sm border transition flex items-center gap-1.5 ${on ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}
+                    style={on ? { background: c.color } : undefined}>
+                    <Icon className="w-4 h-4" />{c.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Пріоритет</label>
+            <div className="flex flex-wrap gap-2">
+              {ANNOUNCEMENT_PRIORITIES.map((p) => {
+                const on = form.priority === p.key;
+                return (
+                  <button key={p.key} type="button" onClick={() => setForm({ ...form, priority: p.key })}
+                    className={`px-3 min-h-[40px] rounded-full text-sm border transition ${on ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}
+                    style={on ? { background: p.color } : undefined}>
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Адресати</label>
+            <div className="flex flex-wrap gap-3 mb-2 text-sm text-stone-700 dark:text-stone-200">
+              {[['all', 'Усі співробітники'], ['roles', 'Певні ролі'], ['locations', 'Певні локації']].map(([k, l]) => (
+                <label key={k} className="flex items-center gap-1.5">
+                  <input type="radio" name="targetMode" checked={targetMode === k} onChange={() => setTargetMode(k)} /> {l}
+                </label>
+              ))}
+            </div>
+            {targetMode === 'roles' && (
+              <div className="flex flex-wrap gap-1.5">
+                {roleKeys.map((rk) => {
+                  const on = targetRoles.includes(rk);
+                  return (
+                    <button key={rk} type="button" onClick={() => toggle(targetRoles, setTargetRoles, rk)}
+                      className={`px-3 py-1 rounded-full text-xs border ${on ? 'bg-rose-500 text-white border-rose-500' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}>
+                      {roleName(rk)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {targetMode === 'locations' && (
+              <div className="flex flex-wrap gap-1.5">
+                {allLocations.map((l) => {
+                  const on = targetLocations.includes(l.id);
+                  return (
+                    <button key={l.id} type="button" onClick={() => toggle(targetLocations, setTargetLocations, l.id)}
+                      className={`px-3 py-1 rounded-full text-xs border ${on ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}
+                      style={on ? { background: l.color || '#a8a29e' } : undefined}>
+                      {l.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Завершення</label>
+              <input type="datetime-local" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })}
+                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md bg-transparent" />
+              <div className="text-xs text-stone-400 mt-1">Порожньо — без терміну</div>
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-200 min-h-[44px]">
+                <input type="checkbox" className="w-4 h-4 accent-rose-500" checked={form.pinned} onChange={(e) => setForm({ ...form, pinned: e.target.checked })} />
+                Закріпити вгорі
+              </label>
+            </div>
+          </div>
+
+          {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
+        </div>
+
+        <div className="p-4 md:p-6 border-t border-stone-200 dark:border-stone-700 flex gap-2 justify-end sticky bottom-0 bg-white dark:bg-stone-900">
+          <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Скасувати</button>
+          <button onClick={save} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
+            {busy ? 'Збереження…' : isEdit ? 'Зберегти' : 'Опублікувати'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

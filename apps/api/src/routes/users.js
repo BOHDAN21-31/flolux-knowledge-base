@@ -181,7 +181,7 @@ router.delete('/me/telegram', requireAuth, wrap(async (req, res) => {
 const PREF_FIELDS = [
   'newArticleAll', 'newArticleMyRole', 'newArticleMyLocation', 'comments',
   'suggestions', 'suggestionApproved', 'birthdays', 'digests', 'roleChanges', 'locationChanges',
-  'telegramEnabled',
+  'telegramEnabled', 'announcementsAll', 'announcementsUrgentOnly',
 ];
 
 // GET /api/users/me/notification-preferences (створює дефолт якщо немає)

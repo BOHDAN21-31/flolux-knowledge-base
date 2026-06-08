@@ -11,7 +11,10 @@ const router = Router();
 const DIGEST_TOPIC = 'hr-digests';
 const articleInclude = { author: true, locations: { include: { location: true } } };
 
-// GET /api/digests — усі бачать опубліковані; HR/admin — усі
+export const DIGEST_CATEGORIES = ['company_news', 'welcome', 'achievement', 'process_change', 'important_date'];
+const normalizeCategory = (v) => (DIGEST_CATEGORIES.includes(v) ? v : null);
+
+// GET /api/digests — усі бачать опубліковані; HR/admin — усі. ?category= для фільтра.
 router.get('/', requireAuth, wrap(async (req, res) => {
   const canSeeDrafts = hasPermission(req.user, 'content.publish_digest');
   const where = { isDigest: true };
@@ -19,6 +22,9 @@ router.get('/', requireAuth, wrap(async (req, res) => {
     where.status = 'published';
     where.OR = [{ publishAt: null }, { publishAt: { lte: new Date() } }];
   }
+  const cat = normalizeCategory(req.query.category);
+  if (cat) where.digestCategory = cat;
+
   const items = await prisma.article.findMany({
     where, include: articleInclude, orderBy: { createdAt: 'desc' },
   });
@@ -43,6 +49,7 @@ router.post('/', requireAuth, requirePermission('content.publish_digest'), wrap(
   const mediaUrls = Array.isArray(req.body.mediaUrls) ? req.body.mediaUrls.filter((x) => typeof x === 'string') : [];
   const locationIds = Array.isArray(req.body.locationIds) ? req.body.locationIds.filter((x) => typeof x === 'string') : [];
   const isDraft = req.body.status === 'draft';
+  const digestCategory = normalizeCategory(req.body.digestCategory);
 
   const article = await prisma.article.create({
     data: {
@@ -54,15 +61,34 @@ router.post('/', requireAuth, requirePermission('content.publish_digest'), wrap(
       mediaUrls,
       authorId: req.user.id,
       isDigest: true,
+      digestCategory,
       status: isDraft ? 'draft' : 'published',
       locations: { create: locationIds.map((locationId) => ({ locationId })) },
     },
     include: articleInclude,
   });
 
-  await logAction(req.user.id, 'digest.created', 'article', article.id, { title, draft: isDraft });
+  await logAction(req.user.id, 'digest.created', 'article', article.id, { title, draft: isDraft, category: digestCategory });
   if (!isDraft) await notifyDigest(article, req.user);
   res.json(serializeArticle(article));
+}));
+
+// PATCH /api/digests/:id — оновити (тільки категорію через цей роут, для решти — звичайні article-роутирути)
+router.patch('/:id', requireAuth, requirePermission('content.publish_digest'), wrap(async (req, res) => {
+  const existing = await prisma.article.findUnique({ where: { id: req.params.id } });
+  if (!existing || !existing.isDigest) return res.status(404).json({ error: 'Дайджест не знайдено' });
+
+  const data = {};
+  if ('digestCategory' in (req.body || {})) {
+    data.digestCategory = normalizeCategory(req.body.digestCategory);
+  }
+  if (Object.keys(data).length === 0) return res.json(serializeArticle(existing));
+
+  const updated = await prisma.article.update({
+    where: { id: req.params.id }, data, include: articleInclude,
+  });
+  await logAction(req.user.id, 'digest.updated', 'article', updated.id, data);
+  res.json(serializeArticle(updated));
 }));
 
 export default router;

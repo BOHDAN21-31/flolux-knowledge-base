@@ -9,6 +9,7 @@ import GlobalSearch from './components/GlobalSearch';
 import MarkdownEditor from './components/MarkdownEditor';
 import NotificationBell from './components/NotificationBell';
 import NotificationsPage from './components/NotificationsPage';
+import AnnouncementsPage, { AnnouncementCard } from './components/AnnouncementsPage';
 import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
 import Stars from './Stars';
 import { userRoles, isAdminUser, isSeniorUser } from './roles';
@@ -17,6 +18,7 @@ import { iconFor } from './icons';
 import { useTheme } from './theme';
 import { renderMarkdown } from './markdown';
 import { getRecent, addRecent, removeRecent, pruneRecent } from './recent';
+import { DIGEST_CATEGORIES, digestCategory } from './constants';
 
 // ── Навігаційний стек ⇄ URL ──
 function pathForFrame(f) {
@@ -31,6 +33,7 @@ function pathForFrame(f) {
     case 'editArticle': return `/articles/${f.articleId}/edit`;
     case 'createArticle': return `/topics/${f.topicId}/new`;
     case 'createDigest': return '/digests/new';
+    case 'announcements': return f.announcementId ? `/announcements/${f.announcementId}` : '/announcements';
     default: return '/';
   }
 }
@@ -41,6 +44,11 @@ function frameFromPath(pathname) {
   if (p === '/profile') return { type: 'profile' };
   if (p === '/notifications') return { type: 'notifications' };
   if (p === '/digests/new') return { type: 'createDigest' };
+  if (p === '/announcements') return { type: 'announcements' };
+  {
+    const m2 = p.match(/^\/announcements\/([^/]+)$/);
+    if (m2) return { type: 'announcements', announcementId: m2[1] };
+  }
   if (p === '/admin') return { type: 'admin' };
   let m;
   if ((m = p.match(/^\/profile\/(data|security|locations|notifications)$/))) return { type: 'profile', section: m[1] };
@@ -236,6 +244,7 @@ function AppInner() {
         onArticleClick={(a) => push({ type: 'article', articleId: a.id })}
         onOpenUser={(id) => push({ type: 'publicProfile', userId: id })}
         onGoProfile={() => reset({ type: 'profile' })}
+        onOpenAnnouncements={() => push({ type: 'announcements' })}
       />
     );
   } else if (current.type === 'profile') {
@@ -261,6 +270,8 @@ function AppInner() {
     );
   } else if (current.type === 'notifications') {
     screen = <NotificationsPage onBack={back} onOpenPath={navigatePath} />;
+  } else if (current.type === 'announcements') {
+    screen = <AnnouncementsPage onBack={back} initialId={current.announcementId || null} />;
   } else if (current.type === 'tech') {
     screen = (
       <TechView
@@ -364,6 +375,8 @@ function AppInner() {
         onOpenNotifSettings={() => reset({ type: 'profile', section: 'notifications' })}
       />
 
+      {currentUser && <UrgentAnnouncementBar onOpen={() => reset({ type: 'announcements' })} />}
+
       <main className="max-w-6xl mx-auto px-4 md:px-6 py-6 md:py-8 pb-24 md:pb-8">
         {screen}
       </main>
@@ -386,6 +399,40 @@ function AppInner() {
           else if (kind === 'locations') reset({ type: 'profile', section: 'locations' });
         }}
       />
+    </div>
+  );
+}
+
+// Червона смуга з найновішим терміновим оголошенням (priority='urgent').
+function UrgentAnnouncementBar({ onOpen }) {
+  const [urgent, setUrgent] = useState(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    apiGet('/api/announcements').then((list) => {
+      if (!active) return;
+      const u = (Array.isArray(list) ? list : [])
+        .filter((a) => a.priority === 'urgent' && (!a.expiresAt || a.expiresAt > Date.now()))
+        .sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+      setUrgent(u);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  if (!urgent || dismissed) return null;
+  return (
+    <div className="bg-rose-600 text-white" style={{ fontFamily: 'system-ui, sans-serif' }}>
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-2 flex items-center gap-3">
+        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <button onClick={onOpen} className="flex-1 text-left text-sm truncate hover:underline">
+          <span className="font-medium">{urgent.title}</span>
+          <span className="opacity-80 ml-2 hidden sm:inline">— натисніть, щоб переглянути</span>
+        </button>
+        <button onClick={() => setDismissed(true)} className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/15 flex-shrink-0" aria-label="Закрити">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -744,7 +791,7 @@ function FilterChip({ label, onRemove }) {
   );
 }
 
-function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior = isAdmin, onTopicClick, onArticleClick, onOpenUser, onGoProfile }) {
+function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior = isAdmin, onTopicClick, onArticleClick, onOpenUser, onGoProfile, onOpenAnnouncements }) {
   const { roleName, roleKeys, roleChipStyle, byKey } = useRoles();
   const roles = userRoles(user);
   const [roleFilter, setRoleFilter] = useState('all');
@@ -762,6 +809,7 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
   const [bdToday, setBdToday] = useState([]);
   const [bdSoon, setBdSoon] = useState([]);
   const [digests, setDigests] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [recent, setRecent] = useState(getRecent());
 
   useEffect(() => {
@@ -775,6 +823,10 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
       setBdToday(Array.isArray(d.birthdaysToday) ? d.birthdaysToday : []);
       setBdSoon(Array.isArray(d.birthdaysUpcoming) ? d.birthdaysUpcoming : []);
       setDigests(Array.isArray(d.digests) ? d.digests : []);
+    }).catch(() => {});
+
+    apiGet('/api/announcements').then((list) => {
+      if (active) setAnnouncements(Array.isArray(list) ? list : []);
     }).catch(() => {});
 
     // Recent: перевіряємо існування й доступність, чистимо localStorage від мертвих id
@@ -913,6 +965,8 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
           {isSenior ? 'Уся бібліотека знань Flolux' : `Ваші ролі — ${roles.map(roleName).join(', ').toLowerCase()}`}
         </p>
       </div>
+
+      <HomeAnnouncements items={announcements} onChange={setAnnouncements} onSeeAll={onOpenAnnouncements} />
 
       <div className="mb-10 md:mb-12">
         <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4 flex items-center gap-2"><MapPin className="w-3.5 h-3.5" /> Мої локації</h2>
@@ -1092,19 +1146,65 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
               <button onClick={() => onArticleClick({ id: digests[0].id })}
                 className="block w-full text-left rounded-lg p-5 text-white mb-3"
                 style={{ background: 'linear-gradient(120deg,#a855f7,#ec4899)' }}>
-                <div className="text-xs uppercase tracking-widest opacity-80 mb-1">{new Date(digests[0].createdAt).toLocaleDateString('uk-UA')}</div>
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-xs uppercase tracking-widest opacity-80">{new Date(digests[0].createdAt).toLocaleDateString('uk-UA')}</span>
+                  {digests[0].digestCategory && digestCategory(digests[0].digestCategory) && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 backdrop-blur">
+                      {digestCategory(digests[0].digestCategory).icon} {digestCategory(digests[0].digestCategory).label}
+                    </span>
+                  )}
+                </div>
                 <div className="text-lg md:text-xl">{digests[0].title}</div>
               </button>
-              {digests.length > 1 && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {digests.slice(1, 4).map((d) => (
-                    <button key={d.id} onClick={() => onArticleClick({ id: d.id })}
-                      className="text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-3 hover:border-rose-300 transition">
-                      <div className="text-xs text-stone-400 mb-1">{new Date(d.createdAt).toLocaleDateString('uk-UA')}</div>
-                      <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-2">{d.title}</div>
-                    </button>
-                  ))}
-                </div>
+              {digests.length > 3 ? (
+                // Групуємо за категоріями
+                (() => {
+                  const groups = {};
+                  digests.slice(1).forEach((d) => {
+                    const k = d.digestCategory || 'other';
+                    (groups[k] = groups[k] || []).push(d);
+                  });
+                  return (
+                    <div className="space-y-3">
+                      {Object.entries(groups).map(([k, list]) => {
+                        const c = digestCategory(k);
+                        return (
+                          <div key={k}>
+                            <div className="text-xs uppercase tracking-wider text-stone-400 mb-1.5 flex items-center gap-1.5">
+                              {c ? <><span>{c.icon}</span>{c.label}</> : 'Інше'}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              {list.map((d) => (
+                                <button key={d.id} onClick={() => onArticleClick({ id: d.id })}
+                                  className="text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-3 hover:border-rose-300 transition">
+                                  <div className="text-xs text-stone-400 mb-1">{new Date(d.createdAt).toLocaleDateString('uk-UA')}</div>
+                                  <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-2">{d.title}</div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()
+              ) : (
+                digests.length > 1 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {digests.slice(1, 4).map((d) => (
+                      <button key={d.id} onClick={() => onArticleClick({ id: d.id })}
+                        className="text-left bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-3 hover:border-rose-300 transition">
+                        <div className="text-xs text-stone-400 mb-1 flex items-center gap-1.5">
+                          {d.digestCategory && digestCategory(d.digestCategory) && (
+                            <span>{digestCategory(d.digestCategory).icon}</span>
+                          )}
+                          {new Date(d.createdAt).toLocaleDateString('uk-UA')}
+                        </div>
+                        <div className="text-sm text-stone-800 dark:text-stone-100 line-clamp-2">{d.title}</div>
+                      </button>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           )}
@@ -1197,6 +1297,49 @@ function HomeView({ user, topics, articles, allLocations = [], isAdmin, isSenior
             </>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+// Секція "📢 Оголошення" на головній — pinned + не прочитані; click → inline expand.
+function HomeAnnouncements({ items, onChange, onSeeAll }) {
+  const [openId, setOpenId] = useState(null);
+  if (!items || items.length === 0) return null;
+
+  const sorted = [...items].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return b.createdAt - a.createdAt;
+  });
+  const shown = sorted.slice(0, 3);
+  const hasMore = sorted.length > shown.length;
+
+  const markRead = (id) => {
+    apiPost(`/api/announcements/${id}/read`).then(() => {
+      onChange?.((prev) => prev.map((a) => a.id === id ? { ...a, readAt: Date.now() } : a));
+    }).catch(() => {});
+  };
+
+  return (
+    <div className="mb-10 md:mb-12">
+      <h2 className="text-xs uppercase tracking-widest text-stone-400 mb-4 flex items-center gap-2">
+        <AlertCircle className="w-3.5 h-3.5" /> Оголошення компанії
+      </h2>
+      <div className="space-y-3">
+        {shown.map((a) => (
+          <AnnouncementCard
+            key={a.id}
+            ann={a}
+            expanded={openId === a.id}
+            onClick={() => setOpenId(openId === a.id ? null : a.id)}
+            onMarkRead={markRead}
+          />
+        ))}
+      </div>
+      {hasMore && onSeeAll && (
+        <button onClick={onSeeAll} className="inline-block text-sm text-rose-600 hover:text-rose-700 mt-3">
+          Усі оголошення ({sorted.length}) →
+        </button>
       )}
     </div>
   );
@@ -1504,6 +1647,13 @@ function ArticleView({ articleId, user, isAdmin, isSenior = isAdmin, onBack, onE
               {article.isDigest && (
                 <span className="px-2 py-0.5 rounded-full text-xs text-white" style={{ background: 'linear-gradient(90deg,#a855f7,#ec4899)' }}>📢 Дайджест</span>
               )}
+              {article.isDigest && article.digestCategory && digestCategory(article.digestCategory) && (
+                <span className="px-2 py-0.5 rounded-full text-xs text-white flex items-center gap-1"
+                  style={{ background: digestCategory(article.digestCategory).color }}>
+                  <span>{digestCategory(article.digestCategory).icon}</span>
+                  {digestCategory(article.digestCategory).label}
+                </span>
+              )}
               {article.status === 'draft' && (
                 <span className="px-2 py-0.5 rounded-full text-xs bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200">📝 Чернетка</span>
               )}
@@ -1679,6 +1829,7 @@ const mediaType = (url) => (/\.(mp4|mov|webm)$/i.test(url) ? 'video' : 'image');
 
 function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved, digest = false }) {
   const isEdit = mode === 'edit';
+  const isDigestForm = digest || !!article?.isDigest;
   const { roleKeys, roleName } = useRoles();
   const [notifyOn, setNotifyOn] = useState(!!article?.notifyMode);
   const [notifyMode, setNotifyMode] = useState(article?.notifyMode || 'all');
@@ -1691,6 +1842,7 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
     content: article?.content || '',
     tags: isEdit ? (article?.tags || []).join(', ') : '',
   });
+  const [digestCat, setDigestCat] = useState(article?.digestCategory || DIGEST_CATEGORIES[0].key);
   const [locationIds, setLocationIds] = useState(
     isEdit ? (article?.locations || []).map((l) => l.locationId) : []
   );
@@ -1767,8 +1919,12 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
         notifyMode: notifyOn ? notifyMode : null,
         notifyTargets: notifyOn && notifyMode !== 'all' ? notifyTargets : [],
       };
+      if (isDigestForm) payload.digestCategory = digestCat;
       if (isEdit) {
         await apiPatch(`/api/articles/${article.id}`, payload);
+        if (isDigestForm && article?.digestCategory !== digestCat) {
+          await apiPatch(`/api/digests/${article.id}`, { digestCategory: digestCat }).catch(() => {});
+        }
       } else if (digest) {
         await apiPost('/api/digests', payload);
       } else {
@@ -1808,6 +1964,24 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
             <MarkdownEditor value={form.content} onChange={(v) => setForm({ ...form, content: v })}
               placeholder="Текст статті. Markdown підтримується (тулбар вище)." />
           </div>
+
+          {isDigestForm && (
+            <div>
+              <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Категорія дайджесту</label>
+              <div className="flex flex-wrap gap-2" style={{ fontFamily: 'system-ui, sans-serif' }}>
+                {DIGEST_CATEGORIES.map((c) => {
+                  const on = digestCat === c.key;
+                  return (
+                    <button key={c.key} type="button" onClick={() => setDigestCat(c.key)}
+                      className={`px-3 min-h-[40px] rounded-full text-sm border transition flex items-center gap-1.5 ${on ? 'text-white border-transparent' : 'text-stone-600 dark:text-stone-300 border-stone-300 bg-white dark:bg-stone-900'}`}
+                      style={on ? { background: c.color } : undefined}>
+                      <span>{c.icon}</span>{c.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Теги (через кому)</label>

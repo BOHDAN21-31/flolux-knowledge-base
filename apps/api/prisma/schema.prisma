@@ -42,6 +42,41 @@ model User {
   notificationsSent     Notification[] @relation("notifActor")
   notificationPref      NotificationPreference?
   permissions           UserPermission[]
+  announcements         Announcement[]
+  announcementReads     AnnouncementRead[]
+}
+
+model Announcement {
+  id              String              @id @default(cuid())
+  title           String
+  body            String
+  category        String
+  priority        String              @default("normal")
+  authorId        String
+  author          User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  targetRoles     String[]
+  targetLocations String[]
+  expiresAt       DateTime?
+  pinned          Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  reads           AnnouncementRead[]
+
+  @@index([createdAt])
+  @@index([pinned])
+  @@index([expiresAt])
+}
+
+model AnnouncementRead {
+  id             String       @id @default(cuid())
+  announcementId String
+  userId         String
+  readAt         DateTime     @default(now())
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId])
 }
 
 // Каталог дозволів (індивідуальні права поверх ролей).
@@ -112,6 +147,8 @@ model NotificationPreference {
   roleChanges          Boolean  @default(true)
   locationChanges      Boolean  @default(true)
   telegramEnabled      Boolean  @default(true)
+  announcementsAll        Boolean @default(true)
+  announcementsUrgentOnly Boolean @default(false)
   updatedAt            DateTime @default(now()) @updatedAt
 }
 
@@ -167,6 +204,7 @@ model Article {
   notifyTargets Json?
   notifiedAt  DateTime?
   isDigest    Boolean      @default(false)
+  digestCategory String?
   comments    Comment[]
   suggestions Suggestion[]
   locations   ArticleLocation[]

@@ -28,6 +28,7 @@ const TYPE_PREF = {
   role_assigned: 'roleChanges',
   location_approved: 'locationChanges',
   // new_article — prefKey передається явно (newArticleAll|MyRole|MyLocation)
+  // announcement — спеціальна перевірка announcementsAll/UrgentOnly у notifyAnnouncement
 };
 
 // Базовий генератор. Ніколи не кидає — провал не валить мутацію.
@@ -209,6 +210,76 @@ export async function notifyDigest(article, actor) {
       metadata: { articleId: article.id },
     });
   } catch (e) { console.error('[notifyDigest]', e.message); }
+}
+
+// Заголовки/мітки категорій оголошень.
+const ANNOUNCEMENT_LABELS = {
+  urgent: 'Терміново',
+  process: 'Зміни в процесах',
+  deadline: 'Дедлайн',
+  tech_update: 'Технічне оновлення',
+  org_change: 'Організаційне',
+};
+
+// Сповіщення про оголошення.
+// Враховує announcementsAll/UrgentOnly та targetRoles/targetLocations.
+export async function notifyAnnouncement(ann, actor) {
+  try {
+    // Список усіх потенційних адресатів за таргетингом.
+    const hasRoles = Array.isArray(ann.targetRoles) && ann.targetRoles.length > 0;
+    const hasLocs = Array.isArray(ann.targetLocations) && ann.targetLocations.length > 0;
+
+    let recipientIds = [];
+    if (!hasRoles && !hasLocs) {
+      recipientIds = await allUserIdsExcept(ann.authorId);
+    } else {
+      const idSets = [];
+      if (hasRoles) {
+        const rows = await prisma.userRole.findMany({
+          where: { role: { in: ann.targetRoles } }, select: { userId: true },
+        });
+        idSets.push(new Set(rows.map((r) => r.userId)));
+      }
+      if (hasLocs) {
+        const rows = await prisma.userLocation.findMany({
+          where: { locationId: { in: ann.targetLocations }, approved: true }, select: { userId: true },
+        });
+        idSets.push(new Set(rows.map((r) => r.userId)));
+      }
+      // Об'єднання таргетів (роль АБО локація)
+      const merged = new Set();
+      idSets.forEach((s) => s.forEach((id) => merged.add(id)));
+      recipientIds = [...merged].filter((id) => id !== ann.authorId);
+    }
+    if (recipientIds.length === 0) return;
+
+    // Фільтр за announcementsAll / announcementsUrgentOnly
+    const prefs = await prisma.notificationPreference.findMany({
+      where: { userId: { in: recipientIds } },
+      select: { userId: true, announcementsAll: true, announcementsUrgentOnly: true },
+    });
+    const prefMap = new Map(prefs.map((p) => [p.userId, p]));
+    const isUrgent = ann.priority === 'urgent';
+    const allowed = recipientIds.filter((id) => {
+      const p = prefMap.get(id);
+      if (!p) return true; // дефолт — все увімкнено
+      if (p.announcementsAll === false) return false;
+      if (p.announcementsUrgentOnly === true && !isUrgent) return false;
+      return true;
+    });
+    if (allowed.length === 0) return;
+
+    const catLabel = ANNOUNCEMENT_LABELS[ann.category] || 'Оголошення';
+    await notify({
+      recipientIds: allowed,
+      type: 'announcement',
+      title: `[${catLabel}] ${ann.title}`,
+      body: String(ann.body || '').slice(0, 240),
+      linkPath: `/announcements/${ann.id}`,
+      actorId: actor?.id || ann.authorId,
+      metadata: { announcementId: ann.id, category: ann.category, priority: ann.priority },
+    });
+  } catch (e) { console.error('[notifyAnnouncement]', e.message); }
 }
 
 // Раз на день генерує сповіщення про сьогоднішні дні народження.

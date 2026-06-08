@@ -19,6 +19,7 @@ export const serializeArticle = (a) => ({
   status: a.status || 'published',
   publishAt: a.publishAt ? ms(a.publishAt) : null,
   isDigest: !!a.isDigest,
+  digestCategory: a.digestCategory || null,
   notifyMode: a.notifyMode || null,
   notifyTargets: Array.isArray(a.notifyTargets) ? a.notifyTargets : [],
   author: a.authorId || 'system',

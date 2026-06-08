@@ -476,6 +476,8 @@ const PREF_LABELS = [
   ['suggestionApproved', 'Прийняття моїх пропозицій'],
   ['birthdays', 'Дні народження колег'],
   ['digests', 'Дайджести компанії'],
+  ['announcementsAll', '📢 Усі оголошення компанії'],
+  ['announcementsUrgentOnly', '📢 Лише термінові оголошення'],
   ['roleChanges', 'Зміна моїх ролей'],
   ['locationChanges', 'Зміна моїх локацій'],
 ];
