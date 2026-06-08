@@ -2,9 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Глобальні адаптивні фікси ─── */
+/* Жодний елемент не повинен викликати горизонтальний скрол сторінки */
+html, body { overflow-x: hidden; max-width: 100vw; }
+body { min-height: 100vh; }
+
+/* Зображення/відео ніколи не вилазять за свій контейнер */
+img, video { max-width: 100%; height: auto; }
+
+/* Таблиці на mobile — скрол всередині, не виштовхує сторінку */
+table { max-width: 100%; }
+.responsive-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Pre/code — переноси, але <code> у тексті статті залишається inline-фіксованим */
+pre { white-space: pre-wrap; word-break: break-word; overflow-x: auto; max-width: 100%; }
+.prose pre { white-space: pre; overflow-x: auto; }
+.prose code { word-break: break-word; }
+
+/* Довгі URL/слова в усій типографіці — обриваємо акуратно */
+.prose a, .prose p, .prose li { overflow-wrap: anywhere; word-break: break-word; }
+
+/* Anchor-навігація — врахування sticky header (≈64px) */
+[id] { scroll-margin-top: 80px; }
+
 /* Темна тема: базові кольори тла/тексту для ділянок без явного dark: */
 html.dark { color-scheme: dark; }
 html.dark body { background-color: #0c0a09; color: #e7e5e4; }
+html.dark { background-color: #0c0a09; }
 
 /* Друк / "Зберегти як PDF" — лишаємо тільки контент статті */
 @media print {
@@ -28,6 +52,19 @@ html.dark body { background-color: #0c0a09; color: #e7e5e4; }
   select {
     font-size: 16px !important;
   }
+}
+
+/* Темна тема для нативних input[type=datetime-local] / date / time */
+html.dark input[type='date'],
+html.dark input[type='datetime-local'],
+html.dark input[type='time'] {
+  color-scheme: dark;
+}
+
+/* iframe для video — 16:9 контейнер */
+.video-16x9 { position: relative; width: 100%; padding-top: 56.25%; }
+.video-16x9 > iframe, .video-16x9 > video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
 }
 
 /* Горизонтальний скрол з інерцією на тач-екранах + тонкий скролбар */

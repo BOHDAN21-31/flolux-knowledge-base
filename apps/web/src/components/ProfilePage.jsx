@@ -611,9 +611,9 @@ function TelegramSection() {
             </button>
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <code className="text-2xl tracking-widest px-4 py-2 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-100">{code}</code>
-                <button onClick={() => copy(code, 'code')} className="px-3 min-h-[44px] rounded-md text-sm border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300">
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="text-xl sm:text-2xl tracking-widest px-3 sm:px-4 py-2 rounded-md bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-100 break-all">{code}</code>
+                <button onClick={() => copy(code, 'code')} className="px-3 min-h-[44px] rounded-md text-sm border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:text-rose-600">
                   {copied === 'code' ? 'Скопійовано' : 'Скопіювати'}
                 </button>
               </div>

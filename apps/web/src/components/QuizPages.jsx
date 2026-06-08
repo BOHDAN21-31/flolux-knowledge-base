@@ -89,7 +89,7 @@ export function QuizPlayerPage({ quizId, onBack, onFinish }) {
 
   return (
     <div>
-      <div className="sticky top-[60px] md:top-[68px] z-20 bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur -mx-4 px-4 md:-mx-6 md:px-6 py-3 mb-4 border-b border-stone-200 dark:border-stone-700">
+      <div className="sticky top-[60px] md:top-[68px] z-30 bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur -mx-4 px-4 md:-mx-6 md:px-6 py-3 mb-4 border-b border-stone-200 dark:border-stone-700">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-stone-400">Тест</div>
@@ -133,13 +133,13 @@ function QuestionCard({ q, idx, answer, onChange }) {
   return (
     <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5">
       <div className="text-xs uppercase tracking-wider text-stone-400 mb-1">Питання {idx + 1} · {QUESTION_TYPE_LABELS[q.type]} · {q.points} б.</div>
-      <div className="text-base text-stone-800 dark:text-stone-100 mb-3" style={{ fontFamily: 'system-ui, sans-serif' }}>{q.text}</div>
+      <div className="text-base text-stone-800 dark:text-stone-100 mb-3 break-words" style={{ fontFamily: 'system-ui, sans-serif' }}>{q.text}</div>
       {q.type === 'single' && (
         <div className="space-y-1.5">
           {(q.options || []).map((o) => (
-            <label key={o.id} className={`flex items-start gap-2 p-2 rounded border cursor-pointer ${answer === o.id ? 'border-rose-300 bg-rose-50 dark:bg-rose-500/15' : 'border-stone-200 dark:border-stone-700'}`}>
+            <label key={o.id} className={`flex items-start gap-2 p-3 rounded border cursor-pointer min-h-[44px] ${answer === o.id ? 'border-rose-300 bg-rose-50 dark:bg-rose-500/15' : 'border-stone-200 dark:border-stone-700'}`}>
               <input type="radio" name={`q-${q.id}`} checked={answer === o.id} onChange={() => onChange(o.id)}
-                className="mt-1 w-4 h-4 accent-rose-500" />
+                className="mt-1 w-5 h-5 accent-rose-500" />
               <span className="text-sm text-stone-700 dark:text-stone-200" style={{ fontFamily: 'system-ui, sans-serif' }}>{o.text}</span>
             </label>
           ))}
@@ -153,7 +153,7 @@ function QuestionCard({ q, idx, answer, onChange }) {
               <label key={o.id} className={`flex items-start gap-2 p-2 rounded border cursor-pointer ${on ? 'border-rose-300 bg-rose-50 dark:bg-rose-500/15' : 'border-stone-200 dark:border-stone-700'}`}>
                 <input type="checkbox" checked={on}
                   onChange={() => onChange(on ? (answer || []).filter((x) => x !== o.id) : [...(answer || []), o.id])}
-                  className="mt-1 w-4 h-4 accent-rose-500" />
+                  className="mt-1 w-5 h-5 accent-rose-500" />
                 <span className="text-sm text-stone-700 dark:text-stone-200" style={{ fontFamily: 'system-ui, sans-serif' }}>{o.text}</span>
               </label>
             );
@@ -162,8 +162,8 @@ function QuestionCard({ q, idx, answer, onChange }) {
       )}
       {q.type === 'text' && (
         <textarea value={answer || ''} onChange={(e) => onChange(e.target.value)}
-          placeholder="Ваша відповідь" rows={3}
-          className="w-full p-3 border border-stone-200 dark:border-stone-700 rounded-md bg-transparent text-sm"
+          placeholder="Ваша відповідь" rows={4}
+          className="w-full p-3 min-h-[100px] border border-stone-200 dark:border-stone-700 rounded-md bg-transparent text-stone-800 dark:text-stone-100 placeholder:text-stone-400 text-sm"
           style={{ fontFamily: 'system-ui, sans-serif' }} />
       )}
     </div>

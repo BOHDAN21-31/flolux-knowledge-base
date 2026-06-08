@@ -827,47 +827,51 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, canAdmin
   const ThemeIcon = theme === 'dark' ? Sun : Moon;
 
   return (
-    <header className="sticky top-0 z-30 bg-white/90 dark:bg-stone-900/90 backdrop-blur border-b border-stone-200 dark:border-stone-700">
-      <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <button onClick={() => onNavigate('home')} className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-500/15 flex items-center justify-center border border-rose-200 dark:border-rose-500/30 group-hover:bg-rose-100 transition">
+    <header className="sticky top-0 z-40 bg-white/90 dark:bg-stone-900/90 backdrop-blur border-b border-stone-200 dark:border-stone-700">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between gap-3 min-w-0">
+        <div className="flex items-center gap-4 lg:gap-8 min-w-0 flex-shrink">
+          <button onClick={() => onNavigate('home')} className="flex items-center gap-3 group min-w-0 flex-shrink-0">
+            <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-500/15 flex items-center justify-center border border-rose-200 dark:border-rose-500/30 group-hover:bg-rose-100 transition flex-shrink-0">
               <Flower2 className="w-5 h-5 text-rose-500" strokeWidth={1.5} />
             </div>
-            <div>
+            <div className="min-w-0 hidden sm:block">
               <div className="text-xl tracking-widest text-stone-800 dark:text-stone-100">FLOLUX</div>
               <div className="text-xs text-stone-400 italic -mt-0.5">База знань</div>
             </div>
           </button>
 
-          {/* Desktop nav (на мобільному дублює bottom-nav — приховано) */}
-          <nav className="hidden md:flex items-center gap-1">
-            <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{canAdmin ? 'Уся бібліотека' : 'Моя бібліотека'}</NavBtn>
+          {/* Desktop nav: на md тісно, на lg повноцінно */}
+          <nav className="hidden md:flex items-center gap-0.5 lg:gap-1 min-w-0">
+            <NavBtn active={view === 'home'} onClick={() => onNavigate('home')} icon={BookOpen}>{canAdmin ? 'Бібліотека' : 'Моя бібліотека'}</NavBtn>
             <NavBtn active={view === 'tech'} onClick={() => onNavigate('tech')} icon={Wrench}>Технічка</NavBtn>
-            <NavBtn active={view === 'docs'} onClick={() => onNavigate('docs')} icon={FileText}>📋 Правила</NavBtn>
-            <NavBtn active={view === 'courses'} onClick={() => onNavigate('courses')} icon={GraduationCap}>🎓 Навчання</NavBtn>
+            <NavBtn active={view === 'docs'} onClick={() => onNavigate('docs')} icon={FileText}>Правила</NavBtn>
+            <NavBtn active={view === 'courses'} onClick={() => onNavigate('courses')} icon={GraduationCap}>Навчання</NavBtn>
             {canAdmin && <NavBtn active={view === 'admin'} onClick={() => onNavigate('admin')} icon={Shield}>{isAdmin ? 'Адмін' : 'Керування'}</NavBtn>}
           </nav>
         </div>
 
         {/* Desktop: пошук + тема + ім'я + аватар + вихід */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-2 lg:gap-3 flex-shrink-0 min-w-0">
           <button onClick={onOpenSearch}
-            className="flex items-center gap-2 px-3 min-h-[40px] rounded-md border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-rose-300 text-sm"
+            className="hidden lg:flex items-center gap-2 px-3 min-h-[40px] rounded-md border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-rose-300 text-sm"
             style={{ fontFamily: 'system-ui, sans-serif' }} title="Пошук">
             <Search className="w-4 h-4" /> Пошук <kbd className="text-xs text-stone-400">⌘K</kbd>
           </button>
-          <button onClick={onToggleTheme} className="w-10 h-10 flex items-center justify-center text-stone-500 dark:text-stone-400 dark:text-stone-300 hover:text-rose-500" title="Тема">
+          <button onClick={onOpenSearch}
+            className="lg:hidden w-11 h-11 flex items-center justify-center text-stone-500 dark:text-stone-400 hover:text-rose-500" title="Пошук">
+            <Search className="w-5 h-5" />
+          </button>
+          <button onClick={onToggleTheme} className="w-11 h-11 flex items-center justify-center text-stone-500 dark:text-stone-400 hover:text-rose-500" title="Тема">
             <ThemeIcon className="w-5 h-5" />
           </button>
           <NotificationBell onOpenPath={onOpenPath} onOpenAll={onOpenAllNotifications} onOpenSettings={onOpenNotifSettings} />
-          <button onClick={onProfile} className="text-right group" title="Мій профіль">
-            <div className="text-sm text-stone-700 dark:text-stone-200 group-hover:text-rose-600 transition" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          <button onClick={onProfile} className="text-right group hidden xl:block max-w-[180px] min-w-0" title="Мій профіль">
+            <div className="text-sm text-stone-700 dark:text-stone-200 group-hover:text-rose-600 transition truncate" style={{ fontFamily: 'system-ui, sans-serif' }}>
               {user.name}{user.surname ? ` ${user.surname}` : ''}
             </div>
-            <div className="text-xs text-stone-500 dark:text-stone-400">{roleLabel}</div>
+            <div className="text-xs text-stone-500 dark:text-stone-400 truncate">{roleLabel}</div>
           </button>
-          <button onClick={onProfile} className="w-9 h-9" title="Мій профіль"><HeaderAvatar user={user} primary={primary} size="w-9 h-9" /></button>
+          <button onClick={onProfile} className="w-11 h-11 flex items-center justify-center" title="Мій профіль"><HeaderAvatar user={user} primary={primary} size="w-9 h-9" /></button>
           <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-rose-500 transition" title="Вийти">
             <LogOut className="w-5 h-5" />
           </button>
@@ -897,8 +901,8 @@ function Header({ user, onLogout, onNavigate, onProfile, view, isAdmin, canAdmin
 function NavBtn({ active, onClick, icon: Icon, children }) {
   return (
     <button onClick={onClick}
-      className={`flex items-center gap-2 px-4 min-h-[44px] rounded-md text-sm transition ${active ? 'bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 hover:bg-stone-50'}`}>
-      <Icon className="w-4 h-4" />
+      className={`flex items-center gap-1.5 lg:gap-2 px-2 lg:px-4 min-h-[44px] rounded-md text-sm whitespace-nowrap transition ${active ? 'bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-100' : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-50 dark:hover:bg-stone-800/60'}`}>
+      <Icon className="w-4 h-4 flex-shrink-0" />
       {children}
     </button>
   );
@@ -915,15 +919,15 @@ function MobileBottomNav({ view, isAdmin, canAdmin, onNavigate, onProfile }) {
   if (canAdmin) items.splice(3, 0, { key: 'admin', label: isAdmin ? 'Адмін' : 'Керування', icon: Shield, onClick: () => onNavigate('admin') });
 
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 flex"
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-stone-900/95 backdrop-blur border-t border-stone-200 dark:border-stone-700 flex"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {items.map((it) => {
         const active = view === it.key;
         return (
           <button key={it.key} onClick={it.onClick}
-            className={`flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-xs transition ${active ? 'text-rose-600' : 'text-stone-500 dark:text-stone-400'}`}>
-            <it.icon className="w-5 h-5" strokeWidth={active ? 2.2 : 1.7} />
-            <span style={{ fontFamily: 'system-ui, sans-serif' }}>{it.label}</span>
+            className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-xs transition px-1 ${active ? 'text-rose-600' : 'text-stone-500 dark:text-stone-400'}`}>
+            <it.icon className="w-5 h-5 flex-shrink-0" strokeWidth={active ? 2.2 : 1.7} />
+            <span className="truncate max-w-full" style={{ fontFamily: 'system-ui, sans-serif' }}>{it.label}</span>
           </button>
         );
       })}
@@ -1839,7 +1843,7 @@ function ArticleView({ articleId, user, isAdmin, isSenior = isAdmin, onBack, onE
       <article className="article-content bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-5 md:p-8 mb-6">
         <>
             <div className="flex items-start justify-between gap-3 mb-4">
-              <h1 className="text-2xl md:text-3xl text-stone-800 dark:text-stone-100">{article.title}</h1>
+              <h1 className="text-2xl md:text-3xl text-stone-800 dark:text-stone-100 break-words min-w-0 flex-1">{article.title}</h1>
               {canEdit && (
                 <button onClick={onEdit} className="w-11 h-11 flex items-center justify-center flex-shrink-0 text-stone-400 hover:text-rose-500 transition" title="Редагувати">
                   <Edit3 className="w-5 h-5" />
@@ -2262,7 +2266,7 @@ function ArticleForm({ mode, topic, article, allLocations = [], onClose, onSaved
               <Plus className="w-4 h-4" /> {uploading ? `Завантаження… ${upPct}%` : 'Додати фото/відео'}
             </button>
             {mediaUrls.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
                 {mediaUrls.map((m, i) => (
                   <div key={m.url} className="relative group">
                     {m.type === 'video'

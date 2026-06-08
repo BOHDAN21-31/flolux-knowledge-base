@@ -56,7 +56,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
       </div>
 
       {/* Mobile: горизонтальний скрол-таб (sticky) */}
-      <div className="md:hidden -mx-4 px-4 mb-4 sticky top-[60px] z-20 bg-stone-50/95 backdrop-blur">
+      <div className="md:hidden -mx-4 px-4 mb-4 sticky top-[60px] z-30 bg-stone-50/95 dark:bg-stone-950/95 backdrop-blur">
         <div className="flex gap-2 overflow-x-auto scroll-touch py-2" style={{ scrollSnapType: 'x proximity' }}>
           {NAV.map((n) => (
             <button key={n.key} onClick={() => setTab(n.key)} style={{ scrollSnapAlign: 'start' }}

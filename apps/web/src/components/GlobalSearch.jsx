@@ -65,20 +65,20 @@ export default function GlobalSearch({ open, onClose, onPick }) {
 
   let idx = -1;
   return (
-    <div className="fixed inset-0 z-[55] flex items-start justify-center px-4 pt-20">
+    <div className="fixed inset-0 z-[55] flex items-start justify-center px-2 sm:px-4 pt-4 sm:pt-20">
       <div className="absolute inset-0 bg-stone-900/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-xl overflow-hidden">
         <div className="flex items-center gap-2 px-4 border-b border-stone-200 dark:border-stone-700">
           <Search className="w-4 h-4 text-stone-400 flex-shrink-0" />
           <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)}
-            placeholder="Пошук статей, людей, локацій, розділів…"
-            className="flex-1 py-3 bg-transparent text-stone-800 dark:text-stone-100 focus:outline-none text-sm"
+            placeholder="Пошук…"
+            className="flex-1 min-w-0 py-3 bg-transparent text-stone-800 dark:text-stone-100 focus:outline-none text-sm"
             style={{ fontFamily: 'system-ui, sans-serif' }} />
-          <button onClick={onClose} className="w-9 h-9 flex items-center justify-center text-stone-400 hover:text-stone-600 dark:hover:text-stone-200">
+          <button onClick={onClose} className="w-11 h-11 flex items-center justify-center text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 flex-shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="max-h-[60vh] overflow-y-auto" style={{ fontFamily: 'system-ui, sans-serif' }}>
+        <div className="max-h-[70vh] sm:max-h-[60vh] overflow-y-auto" style={{ fontFamily: 'system-ui, sans-serif' }}>
           {q.trim().length < 2 ? (
             <p className="p-6 text-sm text-stone-400 text-center">Введіть щонайменше 2 символи…</p>
           ) : loading && flat.length === 0 ? (
@@ -97,8 +97,8 @@ export default function GlobalSearch({ open, onClose, onPick }) {
                   return (
                     <button key={`${g.key}-${item.id}`} onClick={() => pick({ kind: g.key, item })}
                       onMouseEnter={() => setActive(i)}
-                      className={`w-full text-left px-4 py-2.5 flex flex-col ${active === i ? 'bg-rose-50 dark:bg-stone-800' : ''}`}>
-                      <span className="text-sm text-stone-800 dark:text-stone-100">
+                      className={`w-full text-left px-4 py-3 min-h-[44px] flex flex-col ${active === i ? 'bg-rose-50 dark:bg-stone-800' : 'hover:bg-stone-50 dark:hover:bg-stone-800/50'}`}>
+                      <span className="text-sm text-stone-800 dark:text-stone-100 truncate">
                         {item.title || item.name}
                       </span>
                       <span className="text-xs text-stone-400 truncate">
