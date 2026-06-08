@@ -293,6 +293,7 @@ function AppInner() {
         onOpenArticle={(id) => push({ type: 'article', articleId: id })}
         onOpenCourse={(slug) => push({ type: 'course', slug })}
         onOpenCertificate={(eid) => push({ type: 'certificate', enrollmentId: eid })}
+        onOpenUser={(id) => id && push({ type: 'publicProfile', userId: id })}
       />
     );
   } else if (current.type === 'publicProfile') {
@@ -303,6 +304,7 @@ function AppInner() {
         onBack={back}
         onEditProfile={() => reset({ type: 'profile' })}
         onOpenArticle={(id) => push({ type: 'article', articleId: id })}
+        onOpenUser={(id) => id && push({ type: 'publicProfile', userId: id })}
       />
     );
   } else if (current.type === 'notifications') {

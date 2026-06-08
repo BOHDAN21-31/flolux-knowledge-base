@@ -40,6 +40,23 @@ export const COURSE_CATEGORIES = [
 
 export const courseCategory = (key) => COURSE_CATEGORIES.find((c) => c.key === key) || null;
 
+// Статус зайнятості — синхронізовано з apps/api/src/routes/admin.js
+export const EMPLOYMENT_STATUSES = [
+  { key: 'employed', label: 'Працює', color: '#10b981', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  { key: 'intern', label: 'Стажується', color: '#f59e0b', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+  { key: 'probation', label: 'Випробувальний', color: '#f97316', bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+  { key: 'former', label: 'Колишній співробітник', color: '#78716c', bg: 'bg-stone-100', text: 'text-stone-600', border: 'border-stone-300' },
+];
+
+export const employmentStatus = (key) => EMPLOYMENT_STATUSES.find((s) => s.key === key) || EMPLOYMENT_STATUSES[0];
+
+// Outcome 1:1
+export const OO_OUTCOMES = [
+  { key: 'success', label: 'Успіх', color: '#10b981' },
+  { key: 'issues', label: 'Виявлено проблеми', color: '#f59e0b' },
+  { key: 'follow_up_needed', label: 'Потрібен повторний', color: '#3b82f6' },
+];
+
 export const ANNOUNCEMENT_PRIORITIES = [
   { key: 'urgent', label: 'Терміновий', color: '#ef4444' },
   { key: 'high', label: 'Високий', color: '#f59e0b' },

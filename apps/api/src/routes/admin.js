@@ -318,6 +318,61 @@ router.delete('/roles/:key', requireAuth, requirePermission('system.manage_roles
   res.json({ ok: true });
 }));
 
+// PATCH /api/admin/users/:id/employment — HR (через content.publish_digest) або admin.
+// Робоча інформація: статус, стажування, керівник, посада, відділ, дата прийому.
+const EMPLOYMENT_STATUS = ['employed', 'intern', 'probation', 'former'];
+router.patch('/users/:id/employment',
+  requireAuth,
+  (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Не авторизовано' });
+    if (isAdmin(req.user)) return next();
+    if (hasPermission(req.user, 'content.publish_digest')) return next();
+    return res.status(403).json({ error: 'Доступ заборонено' });
+  },
+  wrap(async (req, res) => {
+    const existing = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ error: 'Не знайдено' });
+
+    const data = {};
+    if (req.body?.employmentStatus !== undefined) {
+      if (!EMPLOYMENT_STATUS.includes(req.body.employmentStatus)) {
+        return res.status(400).json({ error: 'Невідомий статус' });
+      }
+      data.employmentStatus = req.body.employmentStatus;
+    }
+    if (req.body?.internshipStartedAt !== undefined) {
+      data.internshipStartedAt = req.body.internshipStartedAt ? new Date(req.body.internshipStartedAt) : null;
+    }
+    if (req.body?.internshipEndsAt !== undefined) {
+      data.internshipEndsAt = req.body.internshipEndsAt ? new Date(req.body.internshipEndsAt) : null;
+    }
+    // Валідація: end має бути після start
+    const newStart = data.internshipStartedAt ?? existing.internshipStartedAt;
+    const newEnd = data.internshipEndsAt ?? existing.internshipEndsAt;
+    if (newStart && newEnd && newEnd <= newStart) {
+      return res.status(400).json({ error: 'Кінець стажування має бути після початку' });
+    }
+    if (req.body?.supervisorId !== undefined) {
+      data.supervisorId = req.body.supervisorId || null;
+    }
+    if (req.body?.department !== undefined) data.department = req.body.department || null;
+    if (req.body?.position !== undefined) data.position = req.body.position || null;
+    if (req.body?.hiredAt !== undefined) data.hiredAt = req.body.hiredAt ? new Date(req.body.hiredAt) : null;
+
+    const u = await prisma.user.update({ where: { id: req.params.id }, data, include: { roles: true } });
+    await logAction(req.user.id, 'user.employment_updated', 'user', u.id, Object.keys(data));
+    res.json({
+      ...publicUser(u),
+      employmentStatus: u.employmentStatus,
+      internshipStartedAt: u.internshipStartedAt ? u.internshipStartedAt.getTime() : null,
+      internshipEndsAt: u.internshipEndsAt ? u.internshipEndsAt.getTime() : null,
+      supervisorId: u.supervisorId || null,
+      department: u.department || null,
+      position: u.position || null,
+      hiredAt: u.hiredAt ? u.hiredAt.getTime() : null,
+    });
+  }));
+
 router.use(requireAuth, requireAdmin);
 
 // ===== Користувачі =====
@@ -339,9 +394,11 @@ router.get('/users/:id', wrap(async (req, res) => {
       roles: true,
       locations: { include: { location: true }, orderBy: { createdAt: 'asc' } },
       articles: { orderBy: { createdAt: 'desc' }, select: { id: true, title: true, topicId: true, createdAt: true } },
+      supervisor: { select: { id: true, name: true, surname: true, avatarUrl: true } },
     },
   });
   if (!u) return res.status(404).json({ error: 'Користувача не знайдено' });
+  const ms = (d) => (d instanceof Date ? d.getTime() : (d ?? null));
   res.json({
     ...publicUser(u),
     locations: u.locations.map((ul) => ({
@@ -352,6 +409,14 @@ router.get('/users/:id', wrap(async (req, res) => {
       approved: ul.approved,
     })),
     articles: u.articles.map((a) => ({ id: a.id, title: a.title, topicId: a.topicId, createdAt: a.createdAt.getTime() })),
+    employmentStatus: u.employmentStatus || 'employed',
+    internshipStartedAt: ms(u.internshipStartedAt),
+    internshipEndsAt: ms(u.internshipEndsAt),
+    supervisorId: u.supervisorId || null,
+    supervisor: u.supervisor ? { id: u.supervisor.id, name: u.supervisor.name, surname: u.supervisor.surname || null, avatarUrl: u.supervisor.avatarUrl || null } : null,
+    department: u.department || null,
+    position: u.position || null,
+    hiredAt: ms(u.hiredAt),
   });
 }));
 

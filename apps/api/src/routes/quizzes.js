@@ -139,6 +139,39 @@ async function maybeCompleteCourseAfterFinalQuiz(attempt, quiz, actor) {
   } catch (e) { console.error('[maybeCompleteCourseAfterFinalQuiz]', e.message); }
 }
 
+// ─── GET /api/quizzes/me/attempts ─── історія моїх спроб (тести+результати)
+router.get('/me/attempts', requireAuth, wrap(async (req, res) => {
+  const list = await prisma.quizAttempt.findMany({
+    where: { userId: req.user.id },
+    include: {
+      quiz: {
+        include: {
+          course: { select: { id: true, slug: true, title: true } },
+          lesson: { select: { id: true, title: true, courseId: true, course: { select: { slug: true, title: true } } } },
+        },
+      },
+    },
+    orderBy: { startedAt: 'desc' },
+  });
+  res.json(list.map((a) => ({
+    id: a.id,
+    quizId: a.quizId,
+    attemptNumber: a.attemptNumber,
+    startedAt: ms(a.startedAt),
+    submittedAt: ms(a.submittedAt),
+    score: a.score ?? null,
+    passed: a.passed ?? null,
+    quiz: {
+      id: a.quiz.id,
+      title: a.quiz.title,
+      passingScore: a.quiz.passingScore,
+    },
+    courseSlug: a.quiz.course?.slug || a.quiz.lesson?.course?.slug || null,
+    courseTitle: a.quiz.course?.title || a.quiz.lesson?.course?.title || null,
+    lessonTitle: a.quiz.lesson?.title || null,
+  })));
+}));
+
 // ─── GET /api/quizzes/by-lesson/:lessonId ───
 // Повертає quiz прив'язаний до уроку, або null.
 router.get('/by-lesson/:lessonId', requireAuth, wrap(async (req, res) => {

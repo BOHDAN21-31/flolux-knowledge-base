@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { wrap } from '../lib.js';
-import { checkBirthdays } from '../services/notifications.js';
+import { checkBirthdays, checkOneOnOneReminders } from '../services/notifications.js';
 
 const router = Router();
 
@@ -41,6 +41,7 @@ router.get('/', requireAuth, wrap(async (req, res) => {
 // GET /api/notifications/unread-count (+ ледача перевірка ДН раз на день)
 router.get('/unread-count', requireAuth, wrap(async (req, res) => {
   await checkBirthdays();
+  checkOneOnOneReminders().catch(() => {});
   const count = await prisma.notification.count({
     where: { recipientId: req.user.id, readAt: null },
   });

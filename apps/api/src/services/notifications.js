@@ -348,6 +348,110 @@ export async function notifyAnnouncement(ann, actor) {
   } catch (e) { console.error('[notifyAnnouncement]', e.message); }
 }
 
+// ─── 1:1 зустрічі (HR/manager ↔ працівник) ───
+const fmtDateTime = (d) => new Date(d).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' });
+const TYPE_PREF_OO = 'oneOnOnesEnabled';
+
+export async function notifyOneOnOneScheduled(oo) {
+  try {
+    if (!oo?.employeeId || oo.employeeId === oo.organizerId) return;
+    const organizer = oo.organizer || await prisma.user.findUnique({ where: { id: oo.organizerId }, select: { name: true } });
+    await notify({
+      recipientIds: [oo.employeeId],
+      type: 'one_on_one_scheduled',
+      title: '📅 Заплановано зустріч 1:1',
+      body: `${fmtDateTime(oo.scheduledAt)} · ${oo.duration || 30} хв${organizer?.name ? ' · з ' + organizer.name : ''}`,
+      linkPath: '/profile',
+      actorId: oo.organizerId,
+      metadata: { oneOnOneId: oo.id },
+      prefKey: TYPE_PREF_OO,
+    });
+  } catch (e) { console.error('[notifyOneOnOneScheduled]', e.message); }
+}
+
+export async function notifyOneOnOneRescheduled(oo, prevAt) {
+  try {
+    if (!oo?.employeeId) return;
+    await notify({
+      recipientIds: [oo.employeeId],
+      type: 'one_on_one_rescheduled',
+      title: '📅 Зустріч 1:1 перенесено',
+      body: `Новий час: ${fmtDateTime(oo.scheduledAt)} (було ${fmtDateTime(prevAt)})`,
+      linkPath: '/profile',
+      actorId: oo.organizerId,
+      metadata: { oneOnOneId: oo.id },
+      prefKey: TYPE_PREF_OO,
+    });
+  } catch (e) { console.error('[notifyOneOnOneRescheduled]', e.message); }
+}
+
+export async function notifyOneOnOneCancelled(oo) {
+  try {
+    if (!oo?.employeeId) return;
+    await notify({
+      recipientIds: [oo.employeeId],
+      type: 'one_on_one_cancelled',
+      title: '📅 Зустріч 1:1 скасовано',
+      body: `Скасовано на ${fmtDateTime(oo.scheduledAt)}`,
+      linkPath: '/profile',
+      actorId: oo.organizerId,
+      metadata: { oneOnOneId: oo.id },
+      prefKey: TYPE_PREF_OO,
+    });
+  } catch (e) { console.error('[notifyOneOnOneCancelled]', e.message); }
+}
+
+export async function notifyOneOnOneCompleted(oo) {
+  try {
+    if (!oo?.employeeId) return;
+    await notify({
+      recipientIds: [oo.employeeId],
+      type: 'one_on_one_completed',
+      title: '✅ Зустріч 1:1 завершено',
+      body: oo.outcome ? `Результат: ${oo.outcome}` : 'Зустріч позначено як завершену',
+      linkPath: '/profile',
+      actorId: oo.organizerId,
+      metadata: { oneOnOneId: oo.id },
+      prefKey: TYPE_PREF_OO,
+    });
+  } catch (e) { console.error('[notifyOneOnOneCompleted]', e.message); }
+}
+
+// Лінивий планувальник — нагадування за день до зустрічі (запускати з checkBirthdays/Publishing).
+let lastOoReminderCheck = 0;
+export async function checkOneOnOneReminders() {
+  try {
+    if (Date.now() - lastOoReminderCheck < 60 * 60 * 1000) return; // раз на годину
+    lastOoReminderCheck = Date.now();
+    const inDay = new Date(Date.now() + 24 * 3600e3);
+    const inDayLater = new Date(Date.now() + 26 * 3600e3); // вікно 2 години
+    const due = await prisma.oneOnOne.findMany({
+      where: {
+        status: 'scheduled',
+        scheduledAt: { gte: inDay, lt: inDayLater },
+      },
+      include: { organizer: { select: { name: true } } },
+      take: 50,
+    });
+    for (const oo of due) {
+      const existing = await prisma.notification.findFirst({
+        where: { type: 'one_on_one_reminder', metadata: { path: ['oneOnOneId'], equals: oo.id } },
+      });
+      if (existing) continue;
+      await notify({
+        recipientIds: [oo.employeeId],
+        type: 'one_on_one_reminder',
+        title: '⏰ Завтра у вас 1:1',
+        body: `${fmtDateTime(oo.scheduledAt)}${oo.organizer?.name ? ' · з ' + oo.organizer.name : ''}`,
+        linkPath: '/profile',
+        actorId: oo.organizerId,
+        metadata: { oneOnOneId: oo.id },
+        prefKey: TYPE_PREF_OO,
+      });
+    }
+  } catch (e) { console.error('[checkOneOnOneReminders]', e.message); }
+}
+
 // Автозапис юзера на onboarding-курси при першому approve.
 // Знаходимо опубліковані курси з isOnboarding=true, де targetRoles порожнє
 // АБО містить хоча б одну роль юзера.

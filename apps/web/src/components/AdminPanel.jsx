@@ -3,14 +3,14 @@ import {
   LayoutDashboard, Users, MapPin, Inbox, BookOpen, MessageSquare, ScrollText,
   Shield, Plus, Trash2, X, Search, ChevronRight, FileText, Cake, Megaphone, Key,
   KeyRound, Check, AlertCircle, Settings as SettingsIcon, Clock, Wrench, Bell,
-  GraduationCap, Award,
+  GraduationCap, Award, Calendar, Briefcase, ChevronDown,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../api';
 import { useRoles } from '../RolesContext';
 import { useConfirm } from './ConfirmDialog';
 import { TOPIC_ICON_NAMES, iconFor } from '../icons';
 import Stars from '../Stars';
-import { DIGEST_CATEGORIES, digestCategory, ANNOUNCEMENT_CATEGORIES, announcementCategory, ANNOUNCEMENT_PRIORITIES } from '../constants';
+import { DIGEST_CATEGORIES, digestCategory, ANNOUNCEMENT_CATEGORIES, announcementCategory, ANNOUNCEMENT_PRIORITIES, EMPLOYMENT_STATUSES, employmentStatus, OO_OUTCOMES } from '../constants';
 
 const fmtDate = (ms) => new Date(ms).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -33,6 +33,7 @@ function buildNav(isAdmin) {
   nav.push({ key: 'announcements', label: '📢 Оголошення', icon: Bell });
   nav.push({ key: 'docsReport', label: '📋 Звіт по документах', icon: FileText });
   nav.push({ key: 'lms', label: '🎓 Навчання', icon: GraduationCap });
+  nav.push({ key: 'oneOnOnes', label: '📅 Зустрічі 1:1', icon: Calendar });
   return nav;
 }
 
@@ -99,6 +100,7 @@ export default function AdminPanel({ topicsMap, reloadTopics, articles, allLocat
           {tab === 'announcements' && <AnnouncementsTab allLocations={allLocations} />}
           {tab === 'docsReport' && <DocsReportTab onOpenUser={onOpenUser} />}
           {tab === 'lms' && <LmsTab onOpenCourses={onOpenCourses} onCreateCourse={onCreateCourse} onOpenCourse={onOpenCourse} onOpenQuiz={onOpenQuiz} />}
+          {tab === 'oneOnOnes' && <OneOnOnesTab onOpenUser={onOpenUser} />}
         </div>
       </div>
     </div>
@@ -144,6 +146,8 @@ function Dashboard({ onJump, isAdmin = true }) {
           </button>
         ))}
       </div>
+
+      <HrInsightsCards onJump={onJump} />
 
       <Card className="p-6">
         <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4">Користувачі за ролями</h3>
@@ -555,6 +559,8 @@ function UserDetailModal({ id, onClose }) {
                 {(u.articles || []).length === 0 && <span className="text-xs text-stone-400 italic">немає</span>}
               </div>
             </div>
+
+            <EmploymentEditor user={u} onSaved={() => apiGet(`/api/admin/users/${id}`).then(setU)} />
 
             <div className="pt-3 border-t border-stone-100 dark:border-stone-800">
               <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-2">Безпека</div>
@@ -2476,5 +2482,501 @@ function LmsCourseRow({ course, onOpen }) {
       )}
       <ChevronRight className="w-4 h-4 text-stone-300" />
     </button>
+  );
+}
+
+// ============ 🪪 Зайнятість (всередині UserDetailModal) ============
+function EmploymentEditor({ user, onSaved }) {
+  const toLocalDate = (ms) => {
+    if (!ms) return '';
+    const d = new Date(ms);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  const [form, setForm] = useState({
+    employmentStatus: user.employmentStatus || 'employed',
+    internshipStartedAt: toLocalDate(user.internshipStartedAt),
+    internshipEndsAt: toLocalDate(user.internshipEndsAt),
+    supervisorId: user.supervisorId || '',
+    department: user.department || '',
+    position: user.position || '',
+    hiredAt: toLocalDate(user.hiredAt),
+  });
+  const [allUsers, setAllUsers] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+
+  useEffect(() => {
+    apiGet('/api/admin/users').then((d) => setAllUsers(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setError(''); setSuccess(false); setBusy(true);
+    try {
+      await apiPatch(`/api/admin/users/${user.id}/employment`, {
+        employmentStatus: form.employmentStatus,
+        internshipStartedAt: form.internshipStartedAt ? new Date(form.internshipStartedAt + 'T00:00').toISOString() : null,
+        internshipEndsAt: form.internshipEndsAt ? new Date(form.internshipEndsAt + 'T00:00').toISOString() : null,
+        supervisorId: form.supervisorId || null,
+        department: form.department || null,
+        position: form.position || null,
+        hiredAt: form.hiredAt ? new Date(form.hiredAt + 'T00:00').toISOString() : null,
+      });
+      setSuccess(true);
+      onSaved?.();
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const status = employmentStatus(form.employmentStatus);
+  const isIntern = form.employmentStatus === 'intern' || form.employmentStatus === 'probation';
+
+  return (
+    <div className="pt-3 border-t border-stone-100 dark:border-stone-800">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 flex items-center gap-1.5">
+          <Briefcase className="w-3.5 h-3.5" /> Зайнятість
+        </div>
+        <button onClick={() => setScheduleOpen(true)}
+          className="text-xs px-2 py-1 rounded-md border border-rose-200 text-rose-700 hover:bg-rose-50 flex items-center gap-1">
+          📅 1:1
+        </button>
+      </div>
+      <div className="space-y-2">
+        <label className="block">
+          <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Статус</span>
+          <select value={form.employmentStatus} onChange={(e) => setForm({ ...form, employmentStatus: e.target.value })}
+            className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100">
+            {EMPLOYMENT_STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+          <span className="text-[10px] inline-block mt-1 px-1.5 py-0.5 rounded" style={{ color: status.color, background: `${status.color}1a` }}>{status.label}</span>
+        </label>
+
+        {isIntern && (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Стажування з</span>
+              <input type="date" value={form.internshipStartedAt} onChange={(e) => setForm({ ...form, internshipStartedAt: e.target.value })}
+                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+            </label>
+            <label className="block">
+              <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">До</span>
+              <input type="date" value={form.internshipEndsAt} onChange={(e) => setForm({ ...form, internshipEndsAt: e.target.value })}
+                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+            </label>
+          </div>
+        )}
+
+        <label className="block">
+          <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Керівник</span>
+          <select value={form.supervisorId} onChange={(e) => setForm({ ...form, supervisorId: e.target.value })}
+            className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100">
+            <option value="">— Не вказано —</option>
+            {allUsers.filter((x) => x.id !== user.id).map((x) => (
+              <option key={x.id} value={x.id}>{x.name}{x.surname ? ' ' + x.surname : ''}</option>
+            ))}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Посада</span>
+            <input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}
+              className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+          </label>
+          <label className="block">
+            <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Відділ</span>
+            <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}
+              className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+          </label>
+        </div>
+        <label className="block">
+          <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Дата прийому</span>
+          <input type="date" value={form.hiredAt} onChange={(e) => setForm({ ...form, hiredAt: e.target.value })}
+            className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+        </label>
+        {error && <div className="p-2 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded">{error}</div>}
+        {success && <div className="p-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded">Збережено</div>}
+        <button onClick={save} disabled={busy}
+          className="px-4 min-h-[44px] bg-rose-500 hover:bg-rose-600 disabled:opacity-60 text-white rounded-md text-sm">
+          {busy ? 'Збереження…' : 'Зберегти зайнятість'}
+        </button>
+      </div>
+      {scheduleOpen && (
+        <ScheduleOOModal employee={user} onClose={() => setScheduleOpen(false)} onCreated={() => setScheduleOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+// ============ 📅 1:1 ЗУСТРІЧІ (вкладка) ============
+function OneOnOnesTab({ onOpenUser }) {
+  const [items, setItems] = useState([]);
+  const [filter, setFilter] = useState('upcoming'); // upcoming | all | completed | cancelled
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [error, setError] = useState('');
+
+  const load = () => {
+    const params = new URLSearchParams();
+    if (filter === 'upcoming') params.set('upcoming', 'true');
+    else if (['completed', 'cancelled', 'scheduled'].includes(filter)) params.set('status', filter);
+    apiGet(`/api/one-on-ones/admin?${params}`).then((d) => setItems(Array.isArray(d) ? d : [])).catch((e) => setError(e.message));
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+  useEffect(() => { apiGet('/api/admin/users').then((d) => setUsers(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-5 md:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">Зустрічі ({items.length})</h3>
+          <button onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-1 px-3 min-h-[44px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+            <Plus className="w-4 h-4" /> Запланувати
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {[['upcoming', 'Майбутні'], ['scheduled', 'Заплановано'], ['completed', 'Завершено'], ['cancelled', 'Скасовано'], ['all', 'Усі']].map(([k, l]) => (
+            <button key={k} onClick={() => setFilter(k)}
+              className={`px-3 py-1 rounded-full text-xs border transition ${filter === k ? 'bg-stone-800 text-white border-stone-800' : 'text-stone-600 dark:text-stone-300 border-stone-300'}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {error && <div className="p-2 mb-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded">{error}</div>}
+        <div className="space-y-2">
+          {items.length === 0 ? (
+            <p className="text-sm text-stone-400 italic py-4 text-center">Зустрічей немає</p>
+          ) : items.map((o) => <OOItemRow key={o.id} oo={o} onOpenUser={onOpenUser} onEdit={() => setEditing(o)} onChange={load} />)}
+        </div>
+      </Card>
+
+      {createOpen && (
+        <OOEditorModal users={users} onClose={() => setCreateOpen(false)} onSaved={() => { setCreateOpen(false); load(); }} />
+      )}
+      {editing && (
+        <OOEditorModal oo={editing} users={users} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />
+      )}
+    </div>
+  );
+}
+
+function OOItemRow({ oo, onOpenUser, onEdit, onChange }) {
+  const confirm = useConfirm();
+  const date = new Date(oo.scheduledAt);
+  const isPast = oo.scheduledAt < Date.now();
+  const statusCls = oo.status === 'completed' ? 'bg-emerald-100 text-emerald-700'
+    : oo.status === 'cancelled' ? 'bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300'
+    : isPast ? 'bg-amber-100 text-amber-800'
+    : 'bg-blue-100 text-blue-700';
+  const statusLabel = oo.status === 'completed' ? 'Завершено'
+    : oo.status === 'cancelled' ? 'Скасовано'
+    : isPast ? 'Прострочена' : 'Заплановано';
+
+  const cancel = async () => {
+    const ok = await confirm({ title: 'Скасувати зустріч?', confirmLabel: 'Скасувати' });
+    if (!ok) return;
+    await apiDelete(`/api/one-on-ones/${oo.id}`);
+    onChange?.();
+  };
+
+  return (
+    <div className="p-3 border border-stone-200 dark:border-stone-700 rounded flex items-center gap-3 flex-wrap">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <span className="text-sm text-stone-800 dark:text-stone-100">
+            {date.toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}
+          </span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${statusCls}`}>{statusLabel}</span>
+          <span className="text-xs text-stone-400">{oo.duration} хв</span>
+        </div>
+        <div className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1 flex-wrap">
+          {oo.employee && (
+            <button onClick={() => onOpenUser?.(oo.employee.id)} className="hover:text-rose-600 truncate">
+              <b>{oo.employee.name}</b>
+            </button>
+          )}
+          <span>↔</span>
+          {oo.organizer && (
+            <button onClick={() => onOpenUser?.(oo.organizer.id)} className="hover:text-rose-600 truncate">
+              {oo.organizer.name}
+            </button>
+          )}
+          {oo.location && <span>· {oo.location}</span>}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <button onClick={onEdit} className="px-2 min-h-[36px] text-xs text-stone-600 dark:text-stone-300 hover:text-rose-600 rounded border border-stone-200 dark:border-stone-700">
+          Деталі
+        </button>
+        {oo.status === 'scheduled' && (
+          <button onClick={cancel} className="px-2 min-h-[36px] text-xs text-rose-600 hover:bg-rose-50 rounded border border-rose-200">
+            ✕
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OOEditorModal({ oo, users = [], onClose, onSaved }) {
+  const isEdit = !!oo?.id;
+  const toLocalInput = (ms) => {
+    if (!ms) return '';
+    const d = new Date(ms);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(10, 0, 0, 0);
+  const [form, setForm] = useState({
+    employeeId: oo?.employeeId || '',
+    organizerId: oo?.organizerId || '',
+    scheduledAt: toLocalInput(oo?.scheduledAt || tomorrow.getTime()),
+    duration: oo?.duration || 30,
+    location: oo?.location || '',
+    agenda: oo?.agenda || '',
+    notes: oo?.notes || '',
+    status: oo?.status || 'scheduled',
+    outcome: oo?.outcome || '',
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    setError('');
+    if (!form.employeeId || !form.scheduledAt) return setError('Виберіть співробітника і дату');
+    setBusy(true);
+    try {
+      if (isEdit) {
+        await apiPatch(`/api/one-on-ones/${oo.id}`, {
+          scheduledAt: new Date(form.scheduledAt).toISOString(),
+          duration: parseInt(form.duration, 10) || 30,
+          location: form.location || null,
+          agenda: form.agenda || null,
+          notes: form.notes || null,
+          status: form.status,
+          outcome: form.outcome || null,
+        });
+      } else {
+        await apiPost('/api/one-on-ones', {
+          employeeId: form.employeeId,
+          organizerId: form.organizerId || undefined,
+          scheduledAt: new Date(form.scheduledAt).toISOString(),
+          duration: parseInt(form.duration, 10) || 30,
+          location: form.location || null,
+          agenda: form.agenda || null,
+        });
+      }
+      onSaved?.();
+    } catch (e) { setError(e.message); setBusy(false); }
+  };
+
+  const complete = async () => {
+    setBusy(true);
+    try {
+      await apiPost(`/api/one-on-ones/${oo.id}/complete`, { notes: form.notes || null, outcome: form.outcome || null });
+      onSaved?.();
+    } catch (e) { setError(e.message); setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-stone-900/50 z-50 flex items-stretch md:items-center justify-center md:p-4">
+      <div className="bg-white dark:bg-stone-900 w-full h-full md:h-auto md:max-w-xl md:max-h-[90vh] rounded-none md:rounded-lg flex flex-col overflow-hidden">
+        <div className="p-4 md:p-6 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between">
+          <h3 className="text-lg text-stone-800 dark:text-stone-100">{isEdit ? 'Зустріч 1:1' : 'Запланувати 1:1'}</h3>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center text-stone-400"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-4 md:p-6 space-y-3 overflow-y-auto flex-1" style={{ fontFamily: 'system-ui, sans-serif' }}>
+          {!isEdit && (
+            <label className="block">
+              <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Співробітник</span>
+              <select value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100">
+                <option value="">— Виберіть —</option>
+                {users.map((u) => <option key={u.id} value={u.id}>{u.name}{u.surname ? ' ' + u.surname : ''}</option>)}
+              </select>
+            </label>
+          )}
+          {isEdit && oo.employee && (
+            <div className="text-sm text-stone-700 dark:text-stone-200">
+              Зустріч з <b>{oo.employee.name}{oo.employee.surname ? ' ' + oo.employee.surname : ''}</b>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Дата і час</span>
+              <input type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })}
+                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+            </label>
+            <label className="block">
+              <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Тривалість, хв</span>
+              <input type="number" min={5} value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })}
+                className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+            </label>
+          </div>
+          <label className="block">
+            <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Локація</span>
+            <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
+              className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+          </label>
+          <label className="block">
+            <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Порядок денний (markdown)</span>
+            <textarea value={form.agenda} onChange={(e) => setForm({ ...form, agenda: e.target.value })} rows={3}
+              className="w-full p-3 border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+          </label>
+          {isEdit && (
+            <>
+              {oo?.employeeNotes && (
+                <div className="text-xs text-stone-500 dark:text-stone-400">
+                  <div className="uppercase tracking-wider mb-1">Нотатки працівника</div>
+                  <div className="p-2 bg-stone-50 dark:bg-stone-800 rounded">{oo.employeeNotes}</div>
+                </div>
+              )}
+              <label className="block">
+                <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Нотатки HR (приватні)</span>
+                <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3}
+                  className="w-full p-3 border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100" />
+              </label>
+              <label className="block">
+                <span className="block text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Результат</span>
+                <select value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })}
+                  className="w-full px-3 min-h-[44px] border border-stone-200 dark:border-stone-700 rounded-md text-sm bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100">
+                  <option value="">— Не вказано —</option>
+                  {OO_OUTCOMES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </select>
+              </label>
+            </>
+          )}
+          {error && <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded">{error}</div>}
+        </div>
+        <div className="p-4 md:p-6 border-t border-stone-200 dark:border-stone-700 flex justify-end gap-2 flex-wrap">
+          <button onClick={onClose} className="px-4 min-h-[44px] bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 rounded-md text-sm">Скасувати</button>
+          {isEdit && oo.status === 'scheduled' && (
+            <button onClick={complete} disabled={busy} className="px-4 min-h-[44px] bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-sm">
+              Позначити завершеною
+            </button>
+          )}
+          <button onClick={save} disabled={busy} className="px-4 min-h-[44px] bg-rose-500 disabled:opacity-60 text-white rounded-md text-sm">
+            {busy ? '…' : isEdit ? 'Зберегти' : 'Запланувати'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Локальна обгортка для модалки запланування з UserDetail.
+function ScheduleOOModal({ employee, onClose, onCreated }) {
+  const [users, setUsers] = useState([]);
+  useEffect(() => { apiGet('/api/admin/users').then((d) => setUsers(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
+  return <OOEditorModal oo={{ employeeId: employee.id, employee }} users={users} onClose={onClose} onSaved={onCreated} />;
+}
+
+// ============ HR-картки на дашборді ============
+function HrInsightsCards({ onJump }) {
+  const [interns, setInterns] = useState([]);
+  const [todayOOs, setTodayOOs] = useState([]);
+  const [overdueCourses, setOverdueCourses] = useState([]);
+
+  useEffect(() => {
+    apiGet('/api/admin/users').then((users) => {
+      const list = (Array.isArray(users) ? users : []).filter((u) => u.employmentStatus === 'intern' || u.employmentStatus === 'probation');
+      setInterns(list);
+    }).catch(() => {});
+
+    apiGet('/api/one-on-ones/admin?upcoming=true').then((d) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = today.getTime() + 86400e3;
+      setTodayOOs((Array.isArray(d) ? d : []).filter((o) => o.scheduledAt >= today.getTime() && o.scheduledAt < tomorrow));
+    }).catch(() => {});
+
+    apiGet('/api/admin/users').then(async (users) => {
+      // Завантажимо list of overdue enrollments
+      const all = await apiGet('/api/courses').catch(() => []);
+      const list = [];
+      for (const c of (Array.isArray(all) ? all : [])) {
+        if (!c.isPublished) continue;
+        try {
+          const enrs = await apiGet(`/api/courses/${c.id}/enrollments`);
+          for (const e of (Array.isArray(enrs) ? enrs : [])) {
+            if (e.dueAt && e.dueAt < Date.now() && e.status !== 'completed') {
+              list.push({ ...e, courseTitle: c.title, courseSlug: c.slug });
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      setOverdueCourses(list);
+    }).catch(() => {});
+  }, []);
+
+  if (interns.length === 0 && todayOOs.length === 0 && overdueCourses.length === 0) return null;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {interns.length > 0 && (
+        <Card className="p-4">
+          <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-2 flex items-center gap-1.5">
+            🎓 Стажери ({interns.length})
+          </div>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {interns.map((u) => {
+              const total = u.internshipStartedAt && u.internshipEndsAt ? (u.internshipEndsAt - u.internshipStartedAt) : 0;
+              const passed = u.internshipStartedAt ? Math.max(0, Date.now() - u.internshipStartedAt) : 0;
+              const pct = total ? Math.min(100, Math.round((passed / total) * 100)) : 0;
+              const daysLeft = u.internshipEndsAt ? Math.max(0, Math.ceil((u.internshipEndsAt - Date.now()) / 86400e3)) : null;
+              return (
+                <div key={u.id} className="text-xs">
+                  <div className="text-stone-700 dark:text-stone-200 truncate">{u.name}{u.surname ? ' ' + u.surname : ''}</div>
+                  <div className="h-1.5 bg-stone-100 dark:bg-stone-800 rounded mt-0.5">
+                    <div className="h-1.5 rounded" style={{ width: `${pct}%`, background: '#f59e0b' }} />
+                  </div>
+                  {daysLeft != null && (
+                    <div className="text-[10px] text-stone-400 mt-0.5">{daysLeft === 0 ? 'Сьогодні' : `${daysLeft} дн.`}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {todayOOs.length > 0 && (
+        <Card className="p-4">
+          <button onClick={() => onJump('oneOnOnes')} className="w-full text-left">
+            <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-2">
+              📅 Сьогодні зустрічей: {todayOOs.length}
+            </div>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {todayOOs.map((o) => (
+                <div key={o.id} className="text-xs flex items-center gap-2">
+                  <span className="text-stone-500 dark:text-stone-400">{new Date(o.scheduledAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="text-stone-700 dark:text-stone-200 truncate">{o.employee?.name}</span>
+                </div>
+              ))}
+            </div>
+          </button>
+        </Card>
+      )}
+
+      {overdueCourses.length > 0 && (
+        <Card className="p-4 border-rose-200 dark:border-rose-500/30">
+          <div className="text-xs uppercase tracking-wider text-rose-700 dark:text-rose-300 mb-2">
+            ⚠️ Прострочено курсів: {overdueCourses.length}
+          </div>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {overdueCourses.slice(0, 6).map((e) => (
+              <div key={e.id} className="text-xs">
+                <div className="text-stone-700 dark:text-stone-200 truncate">{e.user?.name}</div>
+                <div className="text-[10px] text-stone-400 truncate">{e.courseTitle}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }

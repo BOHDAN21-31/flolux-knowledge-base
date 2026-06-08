@@ -1,10 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, Lock, MapPin, Camera, Check, AlertCircle, Trash2, Fingerprint, Plus, Star, X, GraduationCap, Award, Download } from 'lucide-react';
+import {
+  User, Lock, MapPin, Camera, Check, AlertCircle, Trash2, Fingerprint, Plus, Star, X,
+  GraduationCap, Award, Download, Briefcase, Calendar, Clock, BadgeCheck, FileText,
+  ChevronDown, ChevronRight,
+} from 'lucide-react';
 import { apiGet, apiPatch, apiPost, apiDelete, apiUpload, webauthnRegister, webauthnSupported } from '../api';
 import { userRoles } from '../roles';
 import { useRoles } from '../RolesContext';
 import { accountLevel } from '../level';
 import { useConfirm } from './ConfirmDialog';
+import { employmentStatus } from '../constants';
+import { renderMarkdown } from '../markdown';
 import ActivityFeed from './ActivityFeed';
 
 function Banner({ error, success }) {
@@ -16,7 +22,7 @@ function Banner({ error, success }) {
 const SEC_TO_TAB = { data: 'personal', security: 'security', locations: 'locations', notifications: 'notifications' };
 const TAB_TO_SEC = { personal: 'data', security: 'security', locations: 'locations', notifications: 'notifications' };
 
-export default function ProfilePage({ user, allLocations, onRefresh, section = 'data', onSection, onOpenArticle, onOpenCourse, onOpenCertificate }) {
+export default function ProfilePage({ user, allLocations, onRefresh, section = 'data', onSection, onOpenArticle, onOpenCourse, onOpenCertificate, onOpenUser }) {
   const tab = SEC_TO_TAB[section] || 'personal';
   const setTab = (k) => onSection?.(TAB_TO_SEC[k] || 'data');
   const tabs = [
@@ -48,7 +54,10 @@ export default function ProfilePage({ user, allLocations, onRefresh, section = '
         {tab === 'personal' && (
           <>
             <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} onOpenArticle={onOpenArticle} />
+            <EmploymentInfoSection user={user} onOpenUser={onOpenUser} />
             <MyCoursesSection onOpenCourse={onOpenCourse} onOpenCertificate={onOpenCertificate} />
+            <MyQuizAttemptsSection onOpenCourse={onOpenCourse} />
+            <MyOneOnOnesSection />
           </>
         )}
         {tab === 'security' && <SecuritySection user={user} onRefresh={onRefresh} />}
@@ -59,7 +68,10 @@ export default function ProfilePage({ user, allLocations, onRefresh, section = '
       {/* Desktop: усі секції на сторінці */}
       <div className="hidden md:block space-y-12">
         <PersonalSection user={user} allLocations={allLocations} onRefresh={onRefresh} onOpenArticle={onOpenArticle} />
+        <EmploymentInfoSection user={user} onOpenUser={onOpenUser} />
         <MyCoursesSection onOpenCourse={onOpenCourse} onOpenCertificate={onOpenCertificate} />
+        <MyQuizAttemptsSection onOpenCourse={onOpenCourse} />
+        <MyOneOnOnesSection />
         <SecuritySection user={user} onRefresh={onRefresh} />
         <LocationsSection user={user} allLocations={allLocations} onRefresh={onRefresh} />
         <NotificationSettings />
@@ -484,6 +496,7 @@ const PREF_LABELS = [
   ['digests', 'Дайджести компанії'],
   ['announcementsAll', '📢 Усі оголошення компанії'],
   ['announcementsUrgentOnly', '📢 Лише термінові оголошення'],
+  ['oneOnOnesEnabled', '📅 Зустрічі 1:1'],
   ['roleChanges', 'Зміна моїх ролей'],
   ['locationChanges', 'Зміна моїх локацій'],
 ];
@@ -688,6 +701,279 @@ function MyCoursesSection({ onOpenCourse, onOpenCertificate }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ Робоча інформація ============
+function EmploymentInfoSection({ user, onOpenUser }) {
+  const status = employmentStatus(user.employmentStatus);
+  const isIntern = user.employmentStatus === 'intern' || user.employmentStatus === 'probation';
+  const internStart = user.internshipStartedAt;
+  const internEnd = user.internshipEndsAt;
+  const today = Date.now();
+  const totalMs = internStart && internEnd ? Math.max(1, internEnd - internStart) : 0;
+  const passedMs = internStart ? Math.max(0, Math.min(totalMs, today - internStart)) : 0;
+  const pct = totalMs ? Math.round((passedMs / totalMs) * 100) : 0;
+  const daysLeft = internEnd ? Math.max(0, Math.ceil((internEnd - today) / 86400e3)) : null;
+
+  return (
+    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+      <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4 flex items-center gap-2">
+        <BadgeCheck className="w-4 h-4" /> 🪪 Робоча інформація
+      </h3>
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <span className="text-xs px-2.5 py-1 rounded-full border" style={{ borderColor: status.color, color: status.color, background: `${status.color}1a` }}>
+          {status.label}
+        </span>
+        {user.department && <span className="text-xs px-2 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200">{user.department}</span>}
+        {user.position && <span className="text-xs text-stone-600 dark:text-stone-300 italic">{user.position}</span>}
+      </div>
+
+      {isIntern && internStart && internEnd && (
+        <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200">
+          <div className="text-xs text-amber-800 dark:text-amber-300 mb-1">
+            Стажування: {new Date(internStart).toLocaleDateString('uk-UA')} → {new Date(internEnd).toLocaleDateString('uk-UA')}
+          </div>
+          <div className="h-2 bg-white dark:bg-stone-900 rounded mb-1.5">
+            <div className="h-2 rounded transition-all" style={{ width: `${pct}%`, background: '#f59e0b' }} />
+          </div>
+          <div className="text-xs text-amber-700 dark:text-amber-300">
+            {daysLeft != null ? (daysLeft === 0 ? 'Сьогодні останній день' : `Залишилось ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft >= 2 && daysLeft <= 4 ? 'дні' : 'днів'}`) : ''}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        {user.position && <Info label="Посада" value={user.position} />}
+        {user.department && <Info label="Відділ" value={user.department} />}
+        {user.hiredAt && <Info label="Дата прийому" value={new Date(user.hiredAt).toLocaleDateString('uk-UA')} />}
+        {user.supervisor && (
+          <div>
+            <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1">Керівник</div>
+            <button onClick={() => onOpenUser?.(user.supervisor.id)} className="flex items-center gap-2 text-sm hover:text-rose-600 group">
+              <span className="w-7 h-7 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden flex items-center justify-center flex-shrink-0">
+                {user.supervisor.avatarUrl ? <img src={user.supervisor.avatarUrl} alt="" className="w-full h-full object-cover" /> : (user.supervisor.name || '?')[0]}
+              </span>
+              <span className="text-stone-700 dark:text-stone-200 group-hover:text-rose-600 truncate">
+                {user.supervisor.name}{user.supervisor.surname ? ` ${user.supervisor.surname}` : ''}
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-stone-400 italic mt-4">Інформацію оновлює HR. Зверніться до них для змін.</p>
+    </div>
+  );
+}
+
+function Info({ label, value }) {
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-0.5">{label}</div>
+      <div className="text-sm text-stone-700 dark:text-stone-200 break-words">{value}</div>
+    </div>
+  );
+}
+
+// ============ Мої тести (історія attempts) ============
+function MyQuizAttemptsSection({ onOpenCourse }) {
+  const [attempts, setAttempts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    apiGet('/api/quizzes/me/attempts')
+      .then((d) => setAttempts(Array.isArray(d) ? d : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+  if (loading) return null;
+  if (attempts.length === 0) return null;
+
+  const inProgress = attempts.filter((a) => !a.submittedAt);
+  const submitted = attempts.filter((a) => a.submittedAt);
+
+  // Найкращий score по quiz
+  const bestByQuiz = new Map();
+  for (const a of submitted) {
+    if (a.score == null) continue;
+    const prev = bestByQuiz.get(a.quizId);
+    if (!prev || (a.score > prev.score)) bestByQuiz.set(a.quizId, a);
+  }
+  const countsByQuiz = new Map();
+  for (const a of submitted) countsByQuiz.set(a.quizId, (countsByQuiz.get(a.quizId) || 0) + 1);
+
+  return (
+    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+      <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4 flex items-center gap-2">
+        📊 Мої тести
+      </h3>
+      {inProgress.length > 0 && (
+        <div className="mb-4">
+          <div className="text-xs uppercase tracking-wider text-stone-400 mb-2">Активні</div>
+          <div className="space-y-2">
+            {inProgress.map((a) => (
+              <div key={a.id} className="flex items-center justify-between gap-2 p-3 border border-amber-200 bg-amber-50/40 dark:bg-amber-500/10 rounded">
+                <div className="min-w-0">
+                  <div className="text-sm text-stone-800 dark:text-stone-100 truncate">{a.quiz.title}</div>
+                  <div className="text-xs text-stone-400">Спроба {a.attemptNumber} · розпочата {new Date(a.startedAt).toLocaleDateString('uk-UA')}</div>
+                </div>
+                <a href={`/quizzes/${a.quizId}/take`} className="px-3 min-h-[40px] flex items-center bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm">
+                  Продовжити
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="text-xs uppercase tracking-wider text-stone-400 mb-2">Історія ({submitted.length})</div>
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          {submitted.map((a) => (
+            <div key={a.id} className={`flex items-center gap-2 p-2 rounded border ${a.passed ? 'border-emerald-200 bg-emerald-50/30 dark:bg-emerald-500/5' : 'border-rose-200 bg-rose-50/30 dark:bg-rose-500/5'}`}>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-stone-800 dark:text-stone-100 truncate">{a.quiz.title}</div>
+                <div className="text-xs text-stone-400 truncate">
+                  {a.courseTitle ? a.courseTitle : ''}{a.lessonTitle ? ` · ${a.lessonTitle}` : ''}
+                  {a.courseSlug && (
+                    <button onClick={() => onOpenCourse?.(a.courseSlug)} className="ml-1 text-rose-600 hover:underline">переглянути курс</button>
+                  )}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className={`text-sm font-medium ${a.passed ? 'text-emerald-700' : 'text-rose-700'}`}>{a.score}%</div>
+                <div className="text-[10px] text-stone-400">{new Date(a.submittedAt).toLocaleDateString('uk-UA')}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {bestByQuiz.size > 0 && (
+          <div className="mt-3 text-xs text-stone-500 dark:text-stone-400">
+            Найкращий: {Math.max(...[...bestByQuiz.values()].map((a) => a.score))}% ·
+            Унікальних тестів: {bestByQuiz.size}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============ Мої зустрічі 1:1 ============
+function MyOneOnOnesSection() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState(null);
+  const [pastOpen, setPastOpen] = useState(false);
+  const [notesDraft, setNotesDraft] = useState({});
+
+  const load = () => {
+    setLoading(true);
+    apiGet('/api/one-on-ones/me')
+      .then((d) => setItems(Array.isArray(d) ? d : []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading) return null;
+  if (items.length === 0) return null;
+
+  const now = Date.now();
+  const upcoming = items.filter((i) => i.status === 'scheduled' && i.scheduledAt >= now).sort((a, b) => a.scheduledAt - b.scheduledAt);
+  const past = items.filter((i) => i.status !== 'scheduled' || i.scheduledAt < now).sort((a, b) => b.scheduledAt - a.scheduledAt);
+  const next = upcoming[0] || null;
+
+  const saveNotes = async (oo) => {
+    const v = notesDraft[oo.id] ?? oo.employeeNotes ?? '';
+    try {
+      await apiPatch(`/api/one-on-ones/${oo.id}`, { employeeNotes: v });
+      setNotesDraft((p) => { const n = { ...p }; delete n[oo.id]; return n; });
+      load();
+    } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg p-6">
+      <h3 className="text-sm uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-4 flex items-center gap-2">
+        📅 Мої зустрічі 1:1
+      </h3>
+      {next && (
+        <div className="rounded-lg border-2 border-rose-200 dark:border-rose-500/30 bg-rose-50/40 dark:bg-rose-500/10 p-4 mb-4">
+          <div className="text-xs uppercase tracking-wider text-rose-700 dark:text-rose-300 mb-2">Найближча</div>
+          <div className="text-base text-stone-800 dark:text-stone-100">
+            {new Date(next.scheduledAt).toLocaleString('uk-UA', { dateStyle: 'long', timeStyle: 'short' })}
+          </div>
+          <div className="text-xs text-stone-500 dark:text-stone-400 mb-2">
+            {next.duration} хв{next.location ? ` · ${next.location}` : ''} · через {Math.max(0, Math.ceil((next.scheduledAt - now) / 86400e3))} {Math.ceil((next.scheduledAt - now) / 86400e3) === 1 ? 'день' : 'дні'}
+          </div>
+          {next.organizer && (
+            <button onClick={() => window.location.assign(`/users/${next.organizer.id}`)} className="flex items-center gap-2 mb-3 hover:text-rose-600">
+              <span className="w-7 h-7 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden flex items-center justify-center flex-shrink-0">
+                {next.organizer.avatarUrl ? <img src={next.organizer.avatarUrl} alt="" className="w-full h-full object-cover" /> : (next.organizer.name || '?')[0]}
+              </span>
+              <span className="text-sm text-stone-700 dark:text-stone-200">
+                {next.organizer.name}{next.organizer.surname ? ` ${next.organizer.surname}` : ''}
+              </span>
+            </button>
+          )}
+          {next.agenda && (
+            <div className="text-sm prose prose-stone dark:prose-invert max-w-none mb-3" style={{ fontFamily: 'system-ui, sans-serif' }}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(next.agenda) }} />
+          )}
+          <details className="text-sm">
+            <summary className="cursor-pointer text-rose-600 hover:underline">Мої нотатки</summary>
+            <textarea
+              value={notesDraft[next.id] ?? next.employeeNotes ?? ''}
+              onChange={(e) => setNotesDraft((p) => ({ ...p, [next.id]: e.target.value }))}
+              rows={4}
+              placeholder="Запишіть, що хочете обговорити…"
+              className="w-full mt-2 p-2 border border-stone-200 dark:border-stone-700 rounded-md bg-white dark:bg-stone-900 text-sm"
+              style={{ fontFamily: 'system-ui, sans-serif' }} />
+            <button onClick={() => saveNotes(next)}
+              className="mt-1 px-3 min-h-[40px] bg-rose-500 hover:bg-rose-600 text-white rounded-md text-sm">
+              Зберегти нотатки
+            </button>
+          </details>
+        </div>
+      )}
+
+      {upcoming.length > 1 && (
+        <div className="space-y-1.5 mb-3">
+          <div className="text-xs uppercase tracking-wider text-stone-400 mb-1">Майбутні</div>
+          {upcoming.slice(1).map((o) => (
+            <div key={o.id} className="text-sm p-2 rounded border border-stone-200 dark:border-stone-700">
+              <span className="text-stone-700 dark:text-stone-200">{new Date(o.scheduledAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}</span>
+              {o.organizer && <span className="text-xs text-stone-500 dark:text-stone-400 ml-2">з {o.organizer.name}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {past.length > 0 && (
+        <div>
+          <button onClick={() => setPastOpen((v) => !v)} className="flex items-center gap-1 text-xs uppercase tracking-wider text-stone-400 mb-2">
+            {pastOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />} Минулі ({past.length})
+          </button>
+          {pastOpen && (
+            <div className="space-y-1.5">
+              {past.map((o) => (
+                <div key={o.id} className="text-sm p-2 rounded border border-stone-200 dark:border-stone-700 flex items-center justify-between gap-2">
+                  <span className="text-stone-600 dark:text-stone-300 truncate">
+                    {new Date(o.scheduledAt).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}
+                    {o.organizer && <span className="text-xs text-stone-400 ml-2">з {o.organizer.name}</span>}
+                  </span>
+                  {o.status === 'completed' && o.outcome && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 flex-shrink-0">{o.outcome}</span>
+                  )}
+                  {o.status === 'cancelled' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 flex-shrink-0">Скасовано</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

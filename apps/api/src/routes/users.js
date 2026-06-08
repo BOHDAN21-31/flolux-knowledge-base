@@ -9,6 +9,23 @@ import { serializeArticle } from '../serialize.js';
 
 const router = Router();
 
+const ms = (d) => (d instanceof Date ? d.getTime() : (d ?? null));
+
+function employmentBlock(u) {
+  return {
+    employmentStatus: u.employmentStatus || 'employed',
+    internshipStartedAt: ms(u.internshipStartedAt),
+    internshipEndsAt: ms(u.internshipEndsAt),
+    supervisorId: u.supervisorId || null,
+    supervisor: u.supervisor
+      ? { id: u.supervisor.id, name: u.supervisor.name, surname: u.supervisor.surname || null, avatarUrl: u.supervisor.avatarUrl || null }
+      : null,
+    department: u.department || null,
+    position: u.position || null,
+    hiredAt: ms(u.hiredAt),
+  };
+}
+
 async function fullProfile(userId) {
   const u = await prisma.user.findUnique({
     where: { id: userId },
@@ -17,11 +34,13 @@ async function fullProfile(userId) {
       locationReqs: { include: { location: true }, orderBy: { createdAt: 'desc' } },
       webauthn: true,
       roles: true,
+      supervisor: { select: { id: true, name: true, surname: true, avatarUrl: true } },
     },
   });
   if (!u) return null;
   return {
     ...publicUser(u),
+    ...employmentBlock(u),
     locations: u.locations.map((ul) => ({
       locationId: ul.locationId,
       name: ul.location.name,
@@ -181,7 +200,7 @@ router.delete('/me/telegram', requireAuth, wrap(async (req, res) => {
 const PREF_FIELDS = [
   'newArticleAll', 'newArticleMyRole', 'newArticleMyLocation', 'comments',
   'suggestions', 'suggestionApproved', 'birthdays', 'digests', 'roleChanges', 'locationChanges',
-  'telegramEnabled', 'announcementsAll', 'announcementsUrgentOnly',
+  'telegramEnabled', 'announcementsAll', 'announcementsUrgentOnly', 'oneOnOnesEnabled',
 ];
 
 // GET /api/users/me/notification-preferences (створює дефолт якщо немає)
@@ -256,7 +275,11 @@ router.get('/:id/activity', requireAuth, wrap(async (req, res) => {
 router.get('/:id/public', requireAuth, wrap(async (req, res) => {
   const u = await prisma.user.findUnique({
     where: { id: req.params.id },
-    include: { roles: true },
+    include: {
+      roles: true,
+      supervisor: { select: { id: true, name: true, surname: true, avatarUrl: true } },
+      supervisedUsers: { select: { id: true, name: true, surname: true, avatarUrl: true, position: true } },
+    },
   });
   if (!u) return res.status(404).json({ error: 'Користувача не знайдено' });
 
@@ -274,6 +297,10 @@ router.get('/:id/public', requireAuth, wrap(async (req, res) => {
     rating: u.rating ?? 0,
     roles: roleList(u),
     createdAt: u.createdAt instanceof Date ? u.createdAt.getTime() : u.createdAt,
+    ...employmentBlock(u),
+    supervisedUsers: (u.supervisedUsers || []).map((s) => ({
+      id: s.id, name: s.name, surname: s.surname || null, avatarUrl: s.avatarUrl || null, position: s.position || null,
+    })),
     articlesCount,
     commentsCount,
     suggestionsCount,

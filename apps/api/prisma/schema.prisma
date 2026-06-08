@@ -26,6 +26,15 @@ model User {
   telegramUsername String?
   telegramLinkCode String?    @unique
   telegramLinkedAt DateTime?
+  employmentStatus    String   @default("employed")
+  internshipStartedAt DateTime?
+  internshipEndsAt    DateTime?
+  supervisorId        String?
+  supervisor          User?    @relation("userSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
+  supervisedUsers     User[]   @relation("userSupervisor")
+  department          String?
+  position            String?
+  hiredAt             DateTime?
   createdAt     DateTime     @default(now())
   articles      Article[]
   comments      Comment[]
@@ -52,6 +61,30 @@ model User {
   enrolledByMe          Enrollment[]            @relation("enrollmentEnroller")
   quizzes               Quiz[]                  @relation("quizAuthor")
   quizAttempts          QuizAttempt[]
+  oneOnOnesAsEmployee   OneOnOne[]              @relation("ooEmployee")
+  oneOnOnesAsOrganizer  OneOnOne[]              @relation("ooOrganizer")
+}
+
+model OneOnOne {
+  id            String   @id @default(cuid())
+  employeeId    String
+  employee      User     @relation("ooEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  organizerId   String
+  organizer     User     @relation("ooOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  scheduledAt   DateTime
+  duration      Int      @default(30)
+  location      String?
+  agenda        String?
+  notes         String?
+  employeeNotes String?
+  status        String   @default("scheduled")
+  outcome       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([employeeId, scheduledAt])
+  @@index([organizerId])
+  @@index([status])
 }
 
 model Announcement {
@@ -371,6 +404,7 @@ model NotificationPreference {
   telegramEnabled      Boolean  @default(true)
   announcementsAll        Boolean @default(true)
   announcementsUrgentOnly Boolean @default(false)
+  oneOnOnesEnabled        Boolean @default(true)
   updatedAt            DateTime @default(now()) @updatedAt
 }
 
